@@ -34,6 +34,9 @@ const SECURITY = {
 /** This computer's network addresses (IPv4), for the pairing link in 'lan' mode. */
 export const lanAddresses = () => Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')).map((i) => i.address);
 
+/** Does this configuration make the server speak https itself? The one answer, for the link, the settings page and the listener. */
+export const servesTls = (cfg) => !!(cfg?.tlsAuto || (cfg?.tlsCert && cfg?.tlsKey));
+
 /**
  * Only the names this server is meant to answer to (stops DNS-rebinding pages): this computer, the public address,
  * and in 'lan' mode, IP addresses and this computer's own .local name (a page on the internet can't make a browser
@@ -54,7 +57,7 @@ export function hostAllowed(host, cfg, own = localName()) {
  * IP is what the QR code carries unless `name` says otherwise.
  */
 export function pairingUrl(cfg, code, lan = lanAddresses(), { name = false, own = localName() } = {}) {
-  const scheme = cfg.tlsCert && cfg.tlsKey ? 'https' : 'http'; // serving its own certificate: the link says so
+  const scheme = servesTls(cfg) ? 'https' : 'http'; // serving a certificate (its own, or yours): the link says so
   const host = name && own ? own : lan[0];
   const base = cfg.publicUrl || (cfg.bind === 'lan' && host ? `${scheme}://${host}:${cfg.port}` : `${scheme}://127.0.0.1:${cfg.port}`);
   return `${base}/pair#${code}`;
@@ -159,7 +162,7 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
       return out(res, 403, { error: 'That code didn’t work. It may have expired: make a new one on the computer.' });
     }
     failures = 0;
-    const secure = !!req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https' || /^https:/.test(config().publicUrl ?? '');
+    const secure = !!req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https' || /^https:/.test(config().publicUrl ?? '') || servesTls(config());
     log(`remote: paired "${remote.device(made.id)?.name}"`);
     return out(res, 200, { ok: true, name: remote.device(made.id)?.name }, { 'set-cookie': cookieHeader(`${made.id}.${made.secret}`, YEAR_AND_A_BIT, secure) });
   }
@@ -326,7 +329,7 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
     const cfg = config();
     const view = () => ({
       enabled: !!cfg.enabled, running: !!server, error: lastError, port: cfg.port, bind: cfg.bind,
-      secure: !!(cfg.tlsAuto || (cfg.tlsCert && cfg.tlsKey)) || /^https:/.test(cfg.publicUrl ?? ''), publicUrl: cfg.publicUrl || '',
+      secure: servesTls(cfg) || /^https:/.test(cfg.publicUrl ?? ''), publicUrl: cfg.publicUrl || '',
       // Where a phone on your network would look: the addresses, the name, and (with our own certificate) the CA to trust.
       lan: cfg.bind === 'lan' ? { addresses: lanAddresses(), name: localName(), auto: !!cfg.tlsAuto, caFile: cfg.tlsAuto ? join(dir(), 'ca.pem') : null, caFingerprint: cfg.tlsAuto ? caFingerprint(dir()) : null, note: certNote } : null,
       addresses: cfg.bind === 'lan' ? lanAddresses() : [], devices: remote.devices().map((d) => ({ ...d, open: hub.open(d.id) })), waiting: remote.waiting(), streams: hub.size(),

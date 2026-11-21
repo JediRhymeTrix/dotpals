@@ -5,7 +5,7 @@ import { connect } from 'node:tls';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRemoteServer, hostAllowed, pairingUrl } from '../bridge/remote-server.js';
+import { createRemoteServer, hostAllowed, pairingUrl, servesTls } from '../bridge/remote-server.js';
 import { ensureCerts, findOpenssl, localName } from '../bridge/remote-cert.js';
 
 const openssl = findOpenssl();
@@ -33,6 +33,20 @@ test('.local names: cleaned like mDNS does, allowed as a Host only on the networ
   assert.equal(hostAllowed('nighthawk.local.evil.com', lan, 'nighthawk.local'), false);
 });
 
+test('automatic https (tlsAuto) makes the pairing link https, with the address and with the name', () => {
+  const auto = { bind: 'lan', port: 5176, publicUrl: '', tlsAuto: true, tlsCert: '', tlsKey: '' };
+  assert.equal(servesTls(auto), true);
+  assert.equal(pairingUrl(auto, 'X', ['192.168.1.69'], { own: 'nighthawk.local' }), 'https://192.168.1.69:5176/pair#X');
+  assert.equal(pairingUrl(auto, 'X', ['192.168.1.69'], { name: true, own: 'nighthawk.local' }), 'https://nighthawk.local:5176/pair#X');
+  assert.equal(pairingUrl({ ...auto, bind: 'local' }, 'X', ['192.168.1.69']), 'https://127.0.0.1:5176/pair#X');
+  // The other ways to be https, and the ways not to be.
+  assert.equal(servesTls({ tlsCert: 'c.pem', tlsKey: 'k.pem' }), true);
+  assert.equal(servesTls({ tlsCert: 'c.pem', tlsKey: '' }), false);
+  assert.equal(servesTls({ tlsAuto: false }), false);
+  assert.equal(servesTls(undefined), false);
+  assert.equal(pairingUrl({ ...auto, tlsAuto: false }, 'X', ['192.168.1.69']), 'http://192.168.1.69:5176/pair#X');
+});
+
 test('the pairing link carries the address by default and the name on request', () => {
   const cfg = { bind: 'lan', port: 5176, publicUrl: '', tlsAuto: false, tlsCert: 'c', tlsKey: 'k' };
   assert.equal(pairingUrl(cfg, 'X', ['192.168.1.69'], { own: 'nighthawk.local' }), 'https://192.168.1.69:5176/pair#X');
@@ -51,6 +65,13 @@ test('when the address changes, the running server serves a certificate for the 
   });
   await server.apply();
   assert.equal(server.state().running, true, server.state().error ?? '');
+  // What the computer-side API hands the pairing screen: a link that matches what's being served.
+  const reply = { status: 0, body: null };
+  const json = (res, status, body) => { reply.status = status; reply.body = body; };
+  await server.controlApi({ method: 'POST', url: '/api/remote/pair' }, {}, '/api/remote/pair', { json, readBody: async () => '{}' });
+  assert.equal(reply.status, 200);
+  assert.match(reply.body.url, /^https:\/\//, 'the QR link is https when the server is');
+  assert.equal(reply.body.secure, true);
   const first = await peerCert();
   assert.match(first.subjectAltName, /IP Address:192\.168\.1\.69/);
   assert.match(first.subjectAltName, /DNS:nighthawk\.local/);
