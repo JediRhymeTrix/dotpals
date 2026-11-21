@@ -16,11 +16,15 @@ const TYPES = {
 };
 export const typeOf = (path) => TYPES[path.slice(path.lastIndexOf('.'))] ?? 'application/octet-stream';
 
-// Files a device may fetch once signed in, and (PUBLIC) those it may fetch before: the sign-in page
-// and what the browser needs to install the app.
-export const PUBLIC = [/^\/pair$/, /^\/manifest\.webmanifest$/, /^\/sw\.js$/, /^\/remote\/(pair|icon-[\w-]+)\.(js|png)$/, /^\/desktop\/icon\.png$/];
-const PRIVATE = [/^\/src\/[\w.-]+\.js$/, /^\/bridge\/ui\/[\w.-]+\.js$/, /^\/bridge\/activity\.js$/, /^\/remote\/[\w.-]+\.(js|css)$/];
-export const allowed = (path) => PUBLIC.some((r) => r.test(path)) || PRIVATE.some((r) => r.test(path));
+// Static files need no sign-in: they're dotpals's own open-source pages and scripts, with none of
+// your data in them (a browser can't send a cookie-less module import with a header anyway, and the
+// app shell has to load to show the sign-in). Everything with data (/events, /api) needs a device.
+export const ALIASES = { '/': '/bridge/dashboard.html', '/pair': '/bridge/remote/pair.html', '/sw.js': '/bridge/remote/sw.js', '/manifest.webmanifest': '/bridge/remote/manifest.webmanifest' };
+const STATIC = [
+  /^\/(?:pair|sw\.js|manifest\.webmanifest)?$/, /^\/desktop\/icon\.png$/, /^\/src\/[\w.-]+\.js$/, /^\/bridge\/ui\/[\w.-]+\.js$/,
+  /^\/bridge\/activity\.js$/, /^\/bridge\/remote\/(?:icons\/)?[\w.-]+\.(?:js|css|png|svg)$/, /^\/bridge\/vendor\/qrcode\.js$/,
+];
+export const allowed = (path) => STATIC.some((r) => r.test(path));
 
 const sha = (data, alg = 'sha256') => createHash(alg).update(data).digest('base64');
 
@@ -57,7 +61,8 @@ export function createAssets({ root, transform = (path, text) => text, extra = n
       if (hit && hit.source === e) return hit;
       return pack(path, Buffer.from(e.body), e.type, e, 0);
     }
-    const file = normalize(join(root, path === '/' ? '/bridge/dashboard.html' : path));
+    const target = ALIASES[path] ?? path;
+    const file = normalize(join(root, target));
     if (!file.startsWith(root)) return null;
     let info;
     try { info = await stat(file); } catch { return null; }
@@ -65,8 +70,9 @@ export function createAssets({ root, transform = (path, text) => text, extra = n
     const hit = cache.get(path);
     if (hit && hit.mtime === info.mtimeMs) return hit;
     let body = await readFile(file);
-    const type = typeOf(path);
-    if (type.startsWith('text/html') || path.startsWith('/remote/') || path.endsWith('.js')) body = Buffer.from(transform(path, body.toString('utf8')));
+    const type = typeOf(target);
+    // Only the pages and the service worker are rewritten (once, here); other files go out as they are.
+    if (target.endsWith('.html') || target.endsWith('/sw.js')) body = Buffer.from(transform(target, body.toString('utf8')));
     return pack(path, body, type, null, info.mtimeMs);
   }
   function pack(path, body, type, source, mtime) {

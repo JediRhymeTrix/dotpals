@@ -89,6 +89,23 @@ export function createLimiter({ max = 10, windowMs = 60_000, now = Date.now } = 
 
 const PAIR_TTL = 5 * 60_000;
 const MAX_DEVICES = 20;
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford base32: no I, L, O, U to misread
+
+/** A pairing code, 60 bits, shown as XXXX-XXXX-XXXX (it goes in the QR's link and can be typed). */
+export function newCode() {
+  const b = randomBytes(8);
+  let bits = 0n;
+  for (const x of b) bits = (bits << 8n) | BigInt(x);
+  let out = '';
+  for (let i = 0; i < 12; i++) out += ALPHABET[Number((bits >> BigInt(i * 5)) & 31n)];
+  return `${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8)}`;
+}
+
+/** What was typed or scanned, as the 12 symbols it stands for (any case, spaces and dashes, O/I/L as 0/1/1), else null. */
+export function normalizeCode(input) {
+  const s = String(input ?? '').toUpperCase().replace(/[\s-]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+  return /^[0-9A-HJKMNP-TV-Z]{12}$/.test(s) ? s : null;
+}
 
 export function createRemote({ file, now = Date.now } = {}) {
   let data = null;
@@ -125,14 +142,16 @@ export function createRemote({ file, now = Date.now } = {}) {
     startPairing() {
       for (const [h, at] of pending) if (at <= now()) pending.delete(h);
       if (pending.size >= 5) pending.delete(pending.keys().next().value);
-      const token = b64u(randomBytes(32));
+      const token = newCode();
       const expiresAt = now() + PAIR_TTL;
-      pending.set(sha(token).toString('hex'), expiresAt);
+      pending.set(sha(normalizeCode(token)).toString('hex'), expiresAt);
       return { token, expiresAt };
     },
-    /** Trade a token for a device credential, once. Returns { id, secret } or null. */
+    /** Trade a pairing code for a device credential, once. Returns { id, secret } or null. */
     finishPairing(token, name) {
-      const h = sha(String(token ?? '')).toString('hex');
+      const code = normalizeCode(token);
+      if (!code) return null;
+      const h = sha(code).toString('hex');
       const at = pending.get(h);
       pending.delete(h);
       if (!at || at <= now()) return null;
@@ -156,6 +175,9 @@ export function createRemote({ file, now = Date.now } = {}) {
       if (now() - wrote > 10 * 60_000) { wrote = now(); save(); } // not on every request
       return d;
     },
+    /** How many codes are waiting to be used (for the pairing screen). */
+    waiting: () => { for (const [h, at] of pending) if (at <= now()) pending.delete(h); return pending.size; },
+    cancelPairing: () => pending.clear(),
     devices: () => load().devices.map(view),
     device: (id) => { const d = find(id); return d ? view(d) : null; },
     pushTargets: () => load().devices.filter((d) => d.push).map((d) => ({ id: d.id, sub: d.push, control: !!d.control, prefs: cleanPrefs(d.prefs) })),

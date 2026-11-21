@@ -123,6 +123,7 @@ import { handoffNote } from './ui/handoff.js';
 import { claudeContextSize, readUsage } from './usage.js';
 import { checkpoint, createGround, restoreFiles, rewindPlan, runGit, snapshot, testDiff, treeChanges } from './ground.js';
 import { createChat } from './chat.js';
+import { createRemoteServer } from './remote-server.js';
 import { agentEnv, askPlanner, claudeTaskArgs, createTaskList, doneItem, evaluate, fixRequest, knownProjects, makePlan, newSessionId, openPr, prPlan, receiptMarkdown, run, saveTask, taskMarkdown, taskPrompt, verdictWords } from './tasks.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -254,9 +255,11 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   });
   const CHAT_OFF = 'Chat is off. Turn it on in Dashboard → Settings → Chat with your agents.';
 
+  const listeners = new Set(); // in-process followers of every event: the remote client's stream and pushes (bridge/remote-server.js)
   function send(event, data) {
     const line = `${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(data)}\n\n`;
     for (const res of clients) res.write(line);
+    for (const listen of listeners) listen(event, data);
   }
 
   // -- session lifecycle ------------------------------------------------------------
@@ -1254,8 +1257,9 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   const approvalView = ({ resolve, timer, ...item }) => item;
   async function askApproval(event, req) {
     // Only when something that can answer is open (the pal or the notch, which connect with
-    // ?answers=1): an open dashboard alone would leave Claude waiting with nothing to click.
-    if (!config.approvals || !answerers.size || typeof event.tool_name !== 'string') return null;
+    // ?answers=1, or a paired device allowed to control): an open dashboard alone would leave
+    // Claude waiting with nothing to click.
+    if (!config.approvals || !(answerers.size || remoteServer.canAnswer()) || typeof event.tool_name !== 'string') return null;
     const id = randomUUID();
     const session = String(event.session_id);
     const d = describeTool(event.tool_name, event.tool_input ?? {}, event.cwd);
@@ -1604,6 +1608,11 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   }
 
   async function api(req, res, path) {
+    // Pairing and the paired devices: only from this computer (the remote client can't reach these).
+    if (path === '/api/remote' || path.startsWith('/api/remote/')) {
+      if (req.method !== 'GET' && (req.method !== 'POST' || req.headers['x-dotpals'] !== '1')) return json(res, 403, { error: 'forbidden' });
+      return remoteServer.controlApi(req, res, path, { json, readBody });
+    }
     if (req.method === 'GET' && path === '/api/activity') return json(res, 200, { entries: activity.all() });
     if (req.method === 'GET' && path === '/api/loop') {
       const session = new URL(req.url, 'http://localhost').searchParams.get('session');
@@ -1718,6 +1727,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
       if (config.history && !before.history) history.save();
       applyLaya(before);
       if (before.chat && !config.chat) chat.stop(); // turned off: no OpenCode server left running
+      remoteServer.apply().catch(() => {}); // the remote client started, stopped or moved
       // A different checker (or a new key): check it's answering, right away.
       if (before.checker?.mode !== config.checker?.mode || before.checker?.keyLast4 !== config.checker?.keyLast4 || before.checker?.localUrl !== config.checker?.localUrl) heartbeat();
       send('config', withLaya());
@@ -1921,6 +1931,37 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
     return json(res, 200, { ok: true, agent, name, dir: cwd, file, note });
   }
 
+  // -- Remote client (bridge/remote-server.js) ---------------------------------------------------
+  // A second listener for paired phones and tablets; off unless Settings → Remote turns it on.
+  // `snapshot` is what a device gets when it connects: the same picture /events gives, trimmed to
+  // the last few days (it asks for more on demand), and the approvals only if it may answer them.
+  function remoteSnapshot(emit, { days, canAnswer }) {
+    const since = Date.now() - days * DAY;
+    emit('config', withLaya());
+    for (const entry of activity.all()) if ((entry.at ?? 0) >= since) emit('activity', entry);
+    for (const update of sessions.values()) emit(null, update);
+    for (const ctx of contexts.values()) emit('context', ctx);
+    for (const session of helpers.keys()) { const list = helperList(session); if (list.length) emit('helpers', { session, harness: sessions.get(session)?.harness, helpers: list }); }
+    if (canAnswer) {
+      for (const item of approvals.values()) emit('approval', { ...approvalView(item), status: 'pending' });
+      for (const item of ocAsks.values()) emit('ocask', { ...item, status: 'pending' });
+    }
+  }
+  const remoteServer = createRemoteServer({
+    config: () => config.remote,
+    file: () => join(home(), 'remote.json'),
+    root, version, log: print,
+    api: (req, res, path) => api(req, res, path),
+    snapshot: remoteSnapshot,
+    // The request that just ended in this session, for "Claude is done" pushes.
+    turn: (session) => {
+      const done = activity.findLast(session, (e) => e.kind === 'done');
+      const prompt = activity.findLast(session, (e) => e.kind === 'prompt');
+      return done ? { ms: done.ms ?? (prompt ? done.at - prompt.at : 0), prompt: prompt?.title } : null;
+    },
+  });
+  listeners.add((event, data) => { if (config.remote?.enabled) remoteServer.onEvent(event, data); });
+
   // Only answer to our own name: stops "DNS rebinding" pages from reading your activity.
   const allowedHost = (host = '') => /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(host);
 
@@ -2001,7 +2042,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   // 4 s), so a client never reuses one this end is just closing ("fetch failed").
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
-  server.on('close', () => { connectors.close(); chat.stop(); stopWatchers(); clearInterval(reaper); clearInterval(stuckTimer); clearTimeout(firstBeat); clearInterval(beat); laya.stop().catch(() => {}); });
+  server.on('close', () => { remoteServer.stop().catch(() => {}); connectors.close(); chat.stop(); stopWatchers(); clearInterval(reaper); clearInterval(stuckTimer); clearTimeout(firstBeat); clearInterval(beat); laya.stop().catch(() => {}); });
 
   return new Promise((ok, fail) => {
     server.once('error', (err) => { stopWatchers(); clearInterval(reaper); clearInterval(stuckTimer); fail(err); });
@@ -2011,6 +2052,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
       print(`hook endpoint  → http://localhost:${port}/hook`);
       // Only now: a bridge that couldn't listen (one is already running) mustn't start a second Laya.
       applyLaya(null);
+      remoteServer.apply().catch(() => {});
       ok(server);
     });
   });

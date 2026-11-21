@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLimiter, createRemote, cleanPrefs, cleanSubscription, permission, remotePatch } from '../bridge/remote.js';
+import { createLimiter, createRemote, cleanPrefs, cleanSubscription, newCode, normalizeCode, permission, remotePatch } from '../bridge/remote.js';
 
 const dir = await mkdtemp(join(tmpdir(), 'dotpals-remote-'));
 after(() => rm(dir, { recursive: true, force: true }));
@@ -23,6 +23,25 @@ test('a pairing token works once, and only before it expires', () => {
   assert.equal(r.finishPairing('nonsense', 'x'), null);
   assert.equal(r.devices().length, 1);
   assert.equal(r.devices()[0].name, 'Pixel Fold');
+});
+
+test('pairing codes are typeable: 12 symbols, forgiving of case, spaces and look-alikes', () => {
+  const code = newCode();
+  assert.match(code, /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
+  assert.equal(normalizeCode(code), code.replaceAll('-', ''));
+  assert.equal(normalizeCode(code.toLowerCase().replaceAll('-', ' ')), code.replaceAll('-', ''));
+  assert.equal(normalizeCode('0O1I 0000 0000'), '001100000000'); // O reads as 0; I and L as 1
+  assert.equal(normalizeCode('0O1IL 0000 0000'), null); // thirteen symbols
+  for (const bad of ['', 'abc', 'U'.repeat(12), `${code}X`, null, 5]) assert.equal(normalizeCode(bad), null, String(bad));
+  assert.equal(new Set(Array.from({ length: 200 }, newCode)).size, 200);
+  const r = make('codes.json');
+  const { token } = r.startPairing();
+  assert.ok(r.finishPairing(token.toLowerCase().replaceAll('-', ''), 'typed'));
+  assert.equal(r.waiting(), 0);
+  r.startPairing();
+  assert.equal(r.waiting(), 1);
+  r.cancelPairing();
+  assert.equal(r.waiting(), 0);
 });
 
 test('a device signs in with its secret; the file holds only a hash', async () => {
