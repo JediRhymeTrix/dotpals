@@ -11,16 +11,30 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname, networkInterfaces, platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { X509Certificate, randomBytes } from 'node:crypto';
 
 export const certDir = (home) => join(home, 'remote-cert');
+
+/** The CA's SHA-256 fingerprint ("AB:CD:…"), to compare on the phone after copying ca.pem over; null if there's none yet. */
+export function caFingerprint(dir) {
+  try { return new X509Certificate(readFileSync(join(dir, 'ca.pem'))).fingerprint256; } catch { return null; }
+}
 
 /**
  * Every openssl we know to try, in order: PATH, then the ones Git for Windows and Homebrew ship. A PATH
  * entry isn't trusted to work: Anaconda's and XAMPP's builds on Windows look for a config file that often
  * isn't there, so each candidate has to make a real certificate request before it's chosen.
  */
+let foundOpenssl;
 export function findOpenssl(run = spawnSync, exists = existsSync) {
+  // Remembered for the life of the process (the real one only): it's two spawns, and a renewal shouldn't repeat them.
+  if (run === spawnSync && exists === existsSync && foundOpenssl) return foundOpenssl;
+  const found = searchOpenssl(run, exists);
+  if (found && run === spawnSync && exists === existsSync) foundOpenssl = found;
+  return found;
+}
+
+function searchOpenssl(run, exists) {
   const candidates = ['openssl', 'C:\\Program Files\\Git\\usr\\bin\\openssl.exe', 'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe', 'C:\\Program Files (x86)\\Git\\usr\\bin\\openssl.exe', '/usr/bin/openssl', '/opt/homebrew/bin/openssl', '/usr/local/bin/openssl'];
   const probeDir = mkdtempSync(join(tmpdir(), 'dotpals-ossl-'));
   try {
@@ -48,8 +62,17 @@ export function privateAddresses(ifaces = networkInterfaces()) {
   return Object.values(ifaces).flat().filter((i) => i && i.family === 'IPv4' && !i.internal && isPrivate(i.address)).map((i) => i.address);
 }
 
-/** The names the server certificate must answer to. */
-export const altNames = (ips, name) => [...ips.map((i) => `IP:${i}`), 'IP:127.0.0.1', `DNS:${name.toLowerCase()}.local`, 'DNS:localhost'].join(',');
+/**
+ * This computer's multicast-DNS name as a phone would look it up ("nighthawk.local"), or null. macOS may already
+ * give a ".local" hostname, and a name with spaces or dots isn't a valid label, so it's cleaned the way mDNS does.
+ */
+export function localName(name = hostname()) {
+  const label = String(name ?? '').toLowerCase().replace(/\.local\.?$/, '').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63);
+  return label ? `${label}.local` : null;
+}
+
+/** The names the server certificate must answer to: every private address, and the .local name. */
+export const altNames = (ips, name) => [...ips.map((i) => `IP:${i}`), 'IP:127.0.0.1', ...(localName(name) ? [`DNS:${localName(name)}`] : []), 'DNS:localhost'].join(',');
 
 // Name constraints: private ranges, loopback, .local and localhost only.
 export const CONSTRAINTS = 'nameConstraints=critical,permitted;IP:192.168.0.0/255.255.0.0,permitted;IP:10.0.0.0/255.0.0.0,permitted;IP:172.16.0.0/255.240.0.0,permitted;IP:127.0.0.1/255.255.255.255,permitted;DNS:.local,permitted;DNS:localhost';

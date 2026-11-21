@@ -625,27 +625,35 @@ async function laya(flags) {
  */
 async function remoteCommand(sub, flags) {
   if (sub !== 'cert') { console.log('Usage: dotpals remote cert   (https for your own network: see docs/REMOTE.md)'); process.exitCode = sub ? 1 : 0; return; }
-  const { certDir, ensureCerts } = await import('../bridge/remote-cert.js');
+  const { caFingerprint, certDir, ensureCerts, localName } = await import('../bridge/remote-cert.js');
   let made;
   try { made = ensureCerts({ dir: certDir(home()) }); } catch (err) { warn(err.message); process.exitCode = 1; return; }
   ok(made.created.ca ? 'Made a private certificate authority (name-restricted to your own network)' : 'Using your existing certificate authority');
-  ok(made.created.cert ? `Made a server certificate for ${made.addresses.join(', ')}` : 'The server certificate is current');
-  saveConfig({ remote: { tlsCert: made.cert, tlsKey: made.key, bind: 'lan' } });
-  ok('Pointed the remote client at it (reachable on your network, over https)');
+  ok(made.created.cert ? `Made a server certificate for ${made.addresses.join(', ')}${localName() ? ` and ${localName()}` : ''}` : 'The server certificate is current');
+  // tlsAuto: the app keeps this certificate current by itself from now on (a new address gets a new certificate, no restart).
+  const patch = { remote: { tlsAuto: true, tlsCert: '', tlsKey: '', bind: 'lan' } };
+  saveConfig(patch);
+  ok('The remote client will serve https on your network, and renew the certificate itself when the address changes');
   const port = loadConfig().remote.port;
+  const name = localName();
   console.log(`
   ${bold('On each phone or tablet, once')}
     1. Copy ${bold(made.ca)} to it (USB, AirDrop, a file share: it's public, no secret).
+       Its fingerprint, to compare on the phone: ${dim(caFingerprint(certDir(home())) ?? '')}
     2. ${bold('Android')}: Settings → Security → More security settings → Encryption & credentials → Install a certificate → CA certificate.
        ${bold('iPhone/iPad')}: open the file, Settings → Profile Downloaded → Install; then Settings → General → About → Certificate Trust Settings → turn it on.
-    3. Open ${bold(`https://${made.addresses[0]}:${port}/pair`)} (or turn the remote client on in Settings → Remote and scan the QR code).
+    3. Turn the remote client on (Settings → Remote) and scan the QR code, or open ${bold(`https://${made.addresses[0]}:${port}/pair`)}${name ? `\n       ${dim(`${name} works too on phones that can look up .local names (iPhone and Mac always can; Android Chrome mostly). Use the address if it doesn't.`)}` : ''}
 
   ${dim('The CA can only vouch for private addresses and .local names, so installing it can’t make a real website look trusted.')}
   ${dim('If your computer’s address changes, run this again: it reissues the certificate (the CA stays, so phones keep working).')}
   ${dim('Firefox on Android keeps its own list: Settings → About → tap the logo 5 times → Secret settings → Use third party CA certificates.')}
 `);
   if (flags.has('--no-restart')) return;
-  try { await fetch(`${bridge}/api/config`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-dotpals': '1' }, body: JSON.stringify({ remote: { tlsCert: made.cert, tlsKey: made.key, bind: 'lan' } }) }); } catch {}
+  // A running dotpals picks it up now (no restart); if it isn't running, the saved settings apply when it starts.
+  try {
+    const res = await fetch(`${bridge}/api/config`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-dotpals': '1' }, body: JSON.stringify(patch), signal: AbortSignal.timeout(5000) });
+    if (res.ok) ok('Applied to the running dotpals');
+  } catch { skip('dotpals isn’t running: it will use this when it starts'); }
 }
 
 const [command = 'help', ...rest] = process.argv.slice(2);

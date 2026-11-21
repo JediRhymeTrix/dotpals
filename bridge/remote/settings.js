@@ -68,7 +68,20 @@ function init() {
         nodes.push(row('Reachable from', 'A phone needs https to install the app and get notifications: use a tunnel (Cloudflare, Tailscale) or your own certificate.', where));
         const url = el('input'); url.type = 'url'; url.placeholder = 'https://dotpals.example.com'; url.value = state.publicUrl; url.setAttribute('aria-label', 'Public address');
         url.onchange = () => save({ publicUrl: url.value.trim() }).catch((e) => toast(e.message));
-        nodes.push(row('Address your devices open', 'The https address of your tunnel or proxy. It goes in the QR code.', url));
+        nodes.push(row('Address your devices open', 'The https address of your tunnel or proxy. Leave empty to use this computer’s address on your network. It goes in the QR code.', url));
+        if (state.bind === 'lan') {
+          const lan = state.lan ?? {};
+          const auto = sw(lan.auto, (i) => save({ tlsAuto: i.checked, ...(i.checked ? { tlsCert: '', tlsKey: '' } : {}) }).catch((e) => toast(e.message)), 'https on my network');
+          nodes.push(row('https on my network', lan.auto
+            ? `dotpals keeps its own certificate and renews it when this computer’s address changes${lan.note ? `. ${lan.note}` : ''}. It needs openssl (Git for Windows has one).`
+            : 'Turn on to serve https here with a private certificate, no tunnel. Each phone trusts it once.', auto));
+          if (lan.auto) {
+            const names = [...(lan.addresses ?? []), lan.name].filter(Boolean).join('  ·  ');
+            nodes.push(row('Covers', names || 'No private network address found: connect to Wi-Fi or Ethernet.'));
+            const fp = el('code', 'mono', lan.caFingerprint ?? 'not made yet'); fp.style.cssText = 'font-size:11px;word-break:break-all;display:block;max-width:100%';
+            nodes.push(row('Install this certificate on each device, once', lan.caFile ? `Copy ${lan.caFile} to the phone and install it as a CA certificate (the file is public; its key never leaves this computer). Check the fingerprint matches:` : 'Made the first time https starts.', fp));
+          }
+        }
       }
       if (state.running) {
         const box = el('div', 'rc-pair');
@@ -77,6 +90,7 @@ function init() {
           box.append(drawQr(pairing.qr));
           const code = el('code', '', pairing.code); code.style.cssText = 'font-size:20px;letter-spacing:.1em';
           box.append(code, el('small', 'muted', pairing.url));
+          if (pairing.byName) box.append(el('small', 'muted', `By name, if this phone can look up .local names: ${pairing.byName}`));
           if (!pairing.secure) box.append(el('small', 'bad', 'This address isn’t https, so a phone can’t finish pairing over it. Set an https address above.'));
           const left = el('small', 'muted'); left.id = 'rc-left';
           box.append(left, btn('Cancel', cancel));

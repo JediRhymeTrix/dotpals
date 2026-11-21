@@ -1950,6 +1950,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   const remoteServer = createRemoteServer({
     config: () => config.remote,
     file: () => join(home(), 'remote.json'),
+    certHome: home(),
     root, version, log: print,
     api: (req, res, path) => api(req, res, path),
     snapshot: remoteSnapshot,

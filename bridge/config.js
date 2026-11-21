@@ -76,7 +76,9 @@ export const DEFAULTS = {
   // Off unless you turn it on. `bind`: 'local' (only this computer: for a tunnel or reverse proxy that
   // adds https) or 'lan' (your network). `publicUrl`: the https address your devices open (it goes in the
   // pairing QR). `tlsCert`/`tlsKey`: files, to serve https yourself. `historyDays`: how much history a device loads.
-  remote: { enabled: false, bind: 'local', port: 5176, publicUrl: '', tlsCert: '', tlsKey: '', historyDays: 3 },
+  // `tlsAuto`: dotpals keeps its own private CA and server certificate in ~/.dotpals/remote-cert (`dotpals remote cert`),
+  // renews it when this computer's addresses change, and reloads it without a restart. tlsCert/tlsKey: your own files.
+  remote: { enabled: false, bind: 'local', port: 5176, publicUrl: '', tlsCert: '', tlsKey: '', tlsAuto: false, historyDays: 3 },
 };
 
 /** Blu's brains (bridge/brain.js), and the ones that take an API key. */
@@ -155,6 +157,7 @@ export function publicUrl(value) {
 function cleanRemote(r) {
   const out = {};
   if (typeof r.enabled === 'boolean') out.enabled = r.enabled;
+  if (typeof r.tlsAuto === 'boolean') out.tlsAuto = r.tlsAuto;
   if (r.bind === 'local' || r.bind === 'lan') out.bind = r.bind;
   const port = Number(r.port);
   if (Number.isInteger(port) && port >= 1024 && port <= 65535) out.port = port;

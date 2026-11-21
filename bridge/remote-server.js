@@ -10,6 +10,7 @@ import { createServer as createHttp } from 'node:http';
 import { createServer as createHttps } from 'node:https';
 import { readFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { gzip as gzipCb } from 'node:zlib';
 import { promisify } from 'node:util';
@@ -19,6 +20,7 @@ import { createPusher } from './remote-push.js';
 import { sendPush } from './webpush.js';
 import { createLimiter, createRemote, permission, remotePatch } from './remote.js';
 import qrcode from './vendor/qrcode.js';
+import { caFingerprint, certDir, ensureCerts, localName, privateAddresses } from './remote-cert.js';
 
 const gzipAsync = promisify(gzipCb);
 const COOKIE = 'dp_device';
@@ -32,18 +34,29 @@ const SECURITY = {
 /** This computer's network addresses (IPv4), for the pairing link in 'lan' mode. */
 export const lanAddresses = () => Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal && !i.address.startsWith('169.254.')).map((i) => i.address);
 
-/** Only the names this server is meant to answer to (stops DNS-rebinding pages): this computer, the public address, and in 'lan' mode, IP addresses. */
-export function hostAllowed(host, cfg) {
-  const name = String(host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+/**
+ * Only the names this server is meant to answer to (stops DNS-rebinding pages): this computer, the public address,
+ * and in 'lan' mode, IP addresses and this computer's own .local name (a page on the internet can't make a browser
+ * send that Host to your computer unless it already controls the name, and mDNS names don't resolve off your network).
+ */
+export function hostAllowed(host, cfg, own = localName()) {
+  const name = String(host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (/^(127\.0\.0\.1|localhost|::1)$/.test(name)) return true;
   try { if (cfg.publicUrl && new URL(cfg.publicUrl).hostname.toLowerCase() === name) return true; } catch {}
-  return cfg.bind === 'lan' && /^\d{1,3}(\.\d{1,3}){3}$/.test(name);
+  if (cfg.bind !== 'lan') return false;
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(name) || (!!own && name === own);
 }
 
-/** The link a device opens: public address, else this computer's network address (lan), else localhost. The code rides in the #fragment: never sent to a server or logged. */
-export function pairingUrl(cfg, code, lan = lanAddresses()) {
+/**
+ * The link a device opens: the public address, else (on your network) this computer's .local name when it has its own
+ * certificate for it, else its IP address, else localhost. The code rides in the #fragment: never sent to a server or logged.
+ * A .local name survives a new DHCP address (the certificate names both), but not every phone can look one up, so the
+ * IP is what the QR code carries unless `name` says otherwise.
+ */
+export function pairingUrl(cfg, code, lan = lanAddresses(), { name = false, own = localName() } = {}) {
   const scheme = cfg.tlsCert && cfg.tlsKey ? 'https' : 'http'; // serving its own certificate: the link says so
-  const base = cfg.publicUrl || (cfg.bind === 'lan' && lan[0] ? `${scheme}://${lan[0]}:${cfg.port}` : `${scheme}://127.0.0.1:${cfg.port}`);
+  const host = name && own ? own : lan[0];
+  const base = cfg.publicUrl || (cfg.bind === 'lan' && host ? `${scheme}://${host}:${cfg.port}` : `${scheme}://127.0.0.1:${cfg.port}`);
   return `${base}/pair#${code}`;
 }
 
@@ -76,7 +89,7 @@ const REPO = 'https://github.com/JediRhymeTrix/dotpals'; // the VAPID contact: p
 
 /** A body shaped like the original request, for handing the bridge a changed one. */
 const shim = (req, text) => Object.assign(Readable.from([Buffer.from(text)]), { method: req.method, url: req.url, headers: { ...req.headers, 'content-length': String(Buffer.byteLength(text)) } });
-export function createRemoteServer({ config, file, root, version, api, snapshot, turn, log = () => {}, pushSend }) {
+export function createRemoteServer({ config, file, certHome, root, version, api, snapshot, turn, log = () => {}, pushSend, renewMs = 60_000, addressesNow = privateAddresses, certs = ensureCerts }) {
   const remote = createRemote({ file });
   const hub = createHub();
   const claims = createLimiter({ max: 8, windowMs: 60_000 });
@@ -238,11 +251,46 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
     return api(req, res, path, { device });
   }
   // -- the listener ---------------------------------------------------------------------------
-  const keyOfConfig = (c) => JSON.stringify([c.enabled, c.bind, c.port, c.tlsCert, c.tlsKey]);
+  const keyOfConfig = (c) => JSON.stringify([c.enabled, c.bind, c.port, c.tlsCert, c.tlsKey, c.tlsAuto]);
+  const dir = () => certDir(certHome);
+  let renewTimer = null;
+  let addressesSeen = '';
+  let certNote = null; // what the last automatic issue did, for the settings page
+
+  /** The certificate and key to serve: our own (kept current) or the files you named. Throws with a plain message. */
+  function loadTls(cfg) {
+    if (cfg.tlsAuto) {
+      const made = certs({ dir: dir(), ips: addressesNow() });
+      addressesSeen = made.addresses.join(',');
+      if (made.created.cert) certNote = `Issued a certificate for ${made.addresses.join(', ')}`;
+      return { cert: readFileSync(made.cert), key: readFileSync(made.key) };
+    }
+    if (cfg.tlsCert && cfg.tlsKey) return { cert: readFileSync(cfg.tlsCert), key: readFileSync(cfg.tlsKey) };
+    return null;
+  }
+  /** While serving our own certificate: when this computer's addresses change, issue a new one and swap it in (no dropped connections). */
+  function watchAddresses() {
+    clearInterval(renewTimer);
+    renewTimer = null;
+    if (!config().tlsAuto || !server) return;
+    renewTimer = setInterval(() => {
+      try {
+        const now = addressesNow().join(',');
+        if (!now || now === addressesSeen || !server?.setSecureContext) return; // no address at all (Wi-Fi blip): keep what we have
+        const tls = loadTls(config());
+        server.setSecureContext(tls);
+        lastError = null;
+        log(`remote: certificate renewed for ${addressesSeen}`);
+      } catch (err) { lastError = `Couldn’t renew the certificate: ${err.message}`; }
+    }, renewMs);
+    renewTimer.unref?.();
+  }
   const stop = () => new Promise((ok) => {
     const s = server;
     server = null;
     runKey = '';
+    clearInterval(renewTimer);
+    renewTimer = null;
     hub.close();
     if (!s) return ok();
     s.close(() => ok());
@@ -258,9 +306,10 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
     if (!cfg.enabled) { runKey = key; return; }
     let make = createHttp;
     let options = {};
-    if (cfg.tlsCert && cfg.tlsKey) {
-      try { options = { cert: readFileSync(cfg.tlsCert), key: readFileSync(cfg.tlsKey) }; make = createHttps; } catch (err) { lastError = `Couldn’t read the certificate: ${err.code ?? err.message}`; return; }
-    }
+    try {
+      const tls = loadTls(cfg);
+      if (tls) { options = tls; make = createHttps; }
+    } catch (err) { lastError = cfg.tlsAuto ? err.message : `Couldn’t read the certificate: ${err.code ?? err.message}`; return; }
     const s = make(options, (req, res) => { handle(req, res).catch((err) => { log(`remote: ${err.message}`); if (!res.headersSent) out(res, 500, { error: 'server error' }); else res.end(); }); });
     s.keepAliveTimeout = 65_000;
     s.headersTimeout = 20_000;
@@ -268,7 +317,7 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
     s.maxConnections = 64;
     await new Promise((ok) => {
       s.once('error', (err) => { lastError = err.code === 'EADDRINUSE' ? `Port ${cfg.port} is already in use. Pick another in Settings → Remote.` : err.message; ok(); });
-      s.listen(cfg.port, cfg.bind === 'lan' ? '0.0.0.0' : '127.0.0.1', () => { server = s; runKey = key; log(`remote client → ${cfg.bind === 'lan' ? 'network' : 'this computer only'}, port ${cfg.port}`); ok(); });
+      s.listen(cfg.port, cfg.bind === 'lan' ? '0.0.0.0' : '127.0.0.1', () => { server = s; runKey = key; watchAddresses(); log(`remote client → ${cfg.bind === 'lan' ? 'network' : 'this computer only'}, port ${cfg.port}`); ok(); });
     });
   }
 
@@ -277,7 +326,9 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
     const cfg = config();
     const view = () => ({
       enabled: !!cfg.enabled, running: !!server, error: lastError, port: cfg.port, bind: cfg.bind,
-      secure: !!(cfg.tlsCert && cfg.tlsKey) || /^https:/.test(cfg.publicUrl ?? ''), publicUrl: cfg.publicUrl || '',
+      secure: !!(cfg.tlsAuto || (cfg.tlsCert && cfg.tlsKey)) || /^https:/.test(cfg.publicUrl ?? ''), publicUrl: cfg.publicUrl || '',
+      // Where a phone on your network would look: the addresses, the name, and (with our own certificate) the CA to trust.
+      lan: cfg.bind === 'lan' ? { addresses: lanAddresses(), name: localName(), auto: !!cfg.tlsAuto, caFile: cfg.tlsAuto ? join(dir(), 'ca.pem') : null, caFingerprint: cfg.tlsAuto ? caFingerprint(dir()) : null, note: certNote } : null,
       addresses: cfg.bind === 'lan' ? lanAddresses() : [], devices: remote.devices().map((d) => ({ ...d, open: hub.open(d.id) })), waiting: remote.waiting(), streams: hub.size(),
     });
     if (req.method === 'GET' && path === '/api/remote') return json(res, 200, view());
@@ -287,7 +338,9 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
       if (!server) return json(res, 409, { error: 'The remote client is off. Turn it on first.' });
       const { token, expiresAt } = remote.startPairing();
       const url = pairingUrl(cfg, token);
-      return json(res, 200, { code: token, expiresAt, url, secure: /^https:/.test(url), qr: qrRows(url) });
+      // The same code by name, for phones whose IP changes or that can resolve .local: shown beside the QR code.
+      const byName = cfg.bind === 'lan' && !cfg.publicUrl && localName() ? pairingUrl(cfg, token, lanAddresses(), { name: true }) : null;
+      return json(res, 200, { code: token, expiresAt, url, byName, secure: /^https:/.test(url), qr: qrRows(url) });
     }
     if (path === '/api/remote/pair/cancel') { remote.cancelPairing(); return json(res, 200, { ok: true }); }
     if (path === '/api/remote/revoke-all') { for (const d of remote.devices()) hub.drop(d.id); remote.revokeAll(); return json(res, 200, view()); }
@@ -300,7 +353,7 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
   }
 
   return {
-    remote, hub, apply, controlApi, onEvent, stop: async () => { pusher.stop(); await stop(); },
+    remote, hub, apply, controlApi, onEvent, state: () => ({ running: !!server, error: lastError, note: certNote, addresses: addressesSeen }), stop: async () => { pusher.stop(); await stop(); },
     /** A paired device that may answer permission prompts has the app open right now. */
     canAnswer: () => remote.devices().some((d) => d.control && hub.open(d.id)),
   };
