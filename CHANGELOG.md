@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Remote client: **animated pals**, one per live agent, in a tray on every page (waiting-for-you first; tap to open the session), a **graphical agent picker** in Sessions, and a notch-style **Talk and Story** panel (the plain story of an agent, and Blu to ask; coding work is a plan you Start). Talk needs the device's control switch and an AI set up for Blu, and says which is missing. Laid out per fold: first screen for the pals, second for Talk, nothing on the hinge.
 - Remote client: swipe left or right to move between tabs. It leaves sideways-scrolling tables, fields, sliders and the screen's edge alone, and stops at the first and last tab.
 - `dotpals remote cert`: https for the remote client on your own network, with no tunnel. A private certificate authority (name-restricted to private addresses and `.local`, so it can't vouch for a real website) and a certificate for this computer's addresses; reissued when the address changes, with the CA kept so phones keep working. The pairing link is https when the server has its own certificate.
 

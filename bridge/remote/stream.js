@@ -53,6 +53,13 @@
     }
     #deliver(name, e) {
       if (e.lastEventId) state.lastId = e.lastEventId;
+      // The agents' states (the unnamed "message" events) are also announced to the page ('dotpals:state'), so
+      // the remote client's pals follow them without a second connection. Nothing else is: the saved history
+      // replayed on every reconnect would only cost battery. The dashboard's own listeners are unaffected.
+      if (name === 'message') { try { window.dispatchEvent(new CustomEvent('dotpals:state', { detail: JSON.parse(e.data) })); } catch {} }
+      // The Story panel reads a session's steps; the dashboard already holds them all, so this only passes the line on.
+      else if (name === 'activity') { try { window.dispatchEvent(new CustomEvent('dotpals:activity', { detail: JSON.parse(e.data) })); } catch {} }
+      else if (name === 'reset') window.dispatchEvent(new CustomEvent('dotpals:reset'));
       if (name === 'message' && typeof this.onmessage === 'function') this.onmessage(e);
       for (const fn of [...(this.#listeners.get(name) ?? [])]) { try { fn.call(this, e); } catch (err) { console.error(err); } }
     }

@@ -1,4 +1,6 @@
 import './swipe.js'; // swipe left or right between tabs
+import './pals.js'; // an animated pal per live agent, and the agent picker in Sessions
+import './talk.js'; // the notch-style Talk and Story panel
 // The remote client's glue, loaded only on a paired device (the dashboard itself is untouched):
 //  - registers the service worker (installable, instant start)
 //  - shows the connection when it matters (offline, reconnecting, signed out), never when fine
