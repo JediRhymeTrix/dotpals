@@ -13,8 +13,11 @@ const openssl = findOpenssl();
 const home = mkdtempSync(join(tmpdir(), 'dotpals-renew-'));
 after(() => rmSync(home, { recursive: true, force: true }));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// A port the system says is free, not a guess in a range other tests also use (the second test takes the one after it).
-const port = await new Promise((ok) => { const s = createNet().listen(0, '127.0.0.1', () => { const { port: p } = s.address(); s.close(() => ok(p)); }); });
+// Ports the system says are free, not a guess in a range other tests also use, and not "the one after it" either: on a CI
+// runner that neighbour can already be taken, and then the server never starts (that failed the second test on Windows).
+const freePort = () => new Promise((ok) => { const s = createNet().listen(0, '127.0.0.1', () => { const { port: p } = s.address(); s.close(() => ok(p)); }); });
+const port = await freePort();
+const port2 = await freePort();
 
 /** What certificate does a TLS client see on this port right now (trusting nothing: we only want to read it). */
 const peerCert = () => new Promise((ok, no) => {
@@ -98,7 +101,7 @@ test('when the address changes, the running server serves a certificate for the 
 test('a failed renewal is reported and the old certificate keeps serving', { skip: !openssl && 'needs openssl' }, async () => {
   let ips = ['192.168.1.69'];
   let broken = false;
-  const cfg = { enabled: true, bind: 'local', port: port + 1, tlsAuto: true, tlsCert: '', tlsKey: '', publicUrl: '' };
+  const cfg = { enabled: true, bind: 'local', port: port2, tlsAuto: true, tlsCert: '', tlsKey: '', publicUrl: '' };
   const server = createRemoteServer({
     config: () => cfg, file: () => join(home, 'remote2.json'), certHome: home, root: process.cwd(), version: 't',
     api: () => {}, snapshot: () => {}, turn: () => null,
@@ -110,7 +113,7 @@ test('a failed renewal is reported and the old certificate keeps serving', { ski
   ips = ['192.168.1.99'];
   for (let i = 0; i < 30 && !server.state().error; i++) await wait(50);
   assert.match(server.state().error, /Couldn’t renew the certificate: openssl req failed: disk full/);
-  const s = connect({ host: '127.0.0.1', port: port + 1, rejectUnauthorized: false });
+  const s = connect({ host: '127.0.0.1', port: port2, rejectUnauthorized: false });
   await new Promise((ok, no) => { s.on('secureConnect', ok); s.on('error', no); });
   s.end();
   await server.stop();

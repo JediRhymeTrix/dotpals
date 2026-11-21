@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-21
+
 ### Fixed
 
 - Remote client on a book-style fold: the agent picker and the search stay on the first screen above the list they filter (they were placed over the detail); the pals fit three to a row and their names wrap instead of being cut ("Claude · web" and "Claude · shop" stay tellable apart). The Report card's row labels wrap on a phone or either half of a fold, so more of it is the agents. On a tabletop the pals are one scrolling row.
-- Two tests that failed on Windows when the whole suite ran at once: a fixed 300–400 ms wait for git's background snapshot (now 1.5–2 s), and a temp folder still busy when removed (now retried).
+- Tests that failed on Windows (and, once, on a CI runner) when the whole suite ran at once: fixed 300–400 ms waits for git's background snapshot (now 1.5–2 s), a temp folder still busy when removed (now retried), and ports picked from a range other tests share or as "the one after" another (now asked of the system).
+
+### Changed
+
+- The hook script `~/.dotpals/integrations/agent-events.mjs` is not part of this repository; the fix that lets it read a list of commands (Cline’s `run_commands`) lives on this computer only.
 
 ## [0.14.0] - 2026-11-21
 
