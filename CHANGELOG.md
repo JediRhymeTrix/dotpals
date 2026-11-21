@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `dotpals remote cert`: https for the remote client on your own network, with no tunnel. A private certificate authority (name-restricted to private addresses and `.local`, so it can't vouch for a real website) and a certificate for this computer's addresses; reissued when the address changes, with the CA kept so phones keep working. The pairing link is https when the server has its own certificate.
+
 ## [0.14.0] - 2026-11-21
 
 ### Added
