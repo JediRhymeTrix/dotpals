@@ -49,6 +49,7 @@ test('each device gets what its own preferences allow, and not while it has the 
   await wait(10);
   assert.deepEqual(r.sent.map((s) => s.sub.endpoint), ['https://p/a']);
   assert.equal(r.sent[0].o.urgency, 'normal');
+  assert.equal(r.sent[0].body.test, false, 'a real notification is not a test: the service worker may hold it back while the app is open');
 });
 
 test('an approval only reaches a device that is allowed to answer it, and is urgent and short-lived', async () => {
@@ -93,6 +94,11 @@ test('with no device subscribed, nothing is sent and no timers are started', asy
 
 test('the test notification goes to one device whatever its preferences', async () => {
   const r = rig([dev('a', { done: false }), dev('b')]);
+  assert.equal(r.pusher.last('a'), null, 'nothing sent yet');
   await r.pusher.test('a');
   assert.deepEqual(r.sent.map((s) => s.sub.endpoint), ['https://p/a']);
+  assert.deepEqual({ ...r.pusher.last('a'), at: 0 }, { at: 0, ok: true, status: 201, gone: false, kind: 'done' }, 'the push service’s answer is kept for the settings page');
+  // Marked as a test, so the service worker shows it even with the app open in front (that's where it's pressed).
+  assert.equal(r.sent[0].body.test, true);
+  assert.equal(r.sent[0].body.url, '/#settings/remote');
 });

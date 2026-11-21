@@ -123,7 +123,9 @@ function init() {
       const name = el('input'); name.value = d.name; name.maxLength = 40; name.setAttribute('aria-label', `Name of ${d.name}`);
       name.onchange = async () => { state = await call(`/api/remote/devices/${d.id}`, { name: name.value }); draw(); };
       const status = d.open ? 'Open now' : `Last seen ${when(d.lastSeen)}`;
-      box.append(row(status, d.push ? 'Notifications on.' : 'Notifications off.', name));
+      const lp = d.lastPush;
+      const pushNote = !d.push ? 'Notifications off.' : lp ? `Notifications on. Last: ${lp.ok ? 'accepted by the push service' : `not delivered (${lp.status || 'no answer'})`}, ${when(lp.at)}.` : 'Notifications on.';
+      box.append(row(status, pushNote, name));
       box.append(row('Let this device control', 'Off: it can look and change how things look. On: it can also answer permission prompts, hand off sessions, rewind and change any setting.',
         sw(d.control, async (i) => { if (i.checked && !confirm(`Let “${d.name}” control dotpals, including allowing agents to run commands?`)) { i.checked = false; return; } state = await call(`/api/remote/devices/${d.id}`, { control: i.checked }); draw(); }, `Let ${d.name} control`)));
       const acts = el('div', 'acts'); acts.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;padding-bottom:8px';
@@ -163,7 +165,9 @@ function init() {
         if (me.push) {
           nodes.push(row('Only when I’m away', 'Skip notifications while the app is open on this device.', sw(me.prefs.quietWhenOpen, guard((i) => set({ prefs: { quietWhenOpen: i.checked } })), 'Skip while open')));
           for (const [k, title, note] of KINDS) nodes.push(row(title, note, sw(me.prefs[k], guard((i) => set({ prefs: { [k]: i.checked } })), title)));
-          nodes.push(row('Check it works', 'Sends a notification now.', btn('Send a test', guard(() => call('/api/remote/me/test', {})))));
+          const lp = me.lastPush;
+          const lastNote = lp ? `Last one: ${lp.ok ? 'accepted by the push service' : `not delivered (the push service said ${lp.status || 'nothing'})`} at ${new Date(lp.at).toLocaleTimeString()}.` : 'Nothing has been sent to this device since dotpals started.';
+          nodes.push(row('Check it works', `Sends a notification now, even with the app open. ${lastNote}`, btn('Send a test', guard(async () => { await call('/api/remote/me/test', {}); await new Promise((r) => setTimeout(r, 1500)); }))));
         }
       }
       nodes.push(el('h3', '', 'Foldable'));

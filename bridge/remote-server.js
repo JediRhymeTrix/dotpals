@@ -188,7 +188,7 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
   /** The device's own page of API: who am I, my push subscription and preferences, sign out. */
   async function meApi(req, res, path, device) {
     const id = device.id;
-    if (req.method === 'GET' && path === '/api/remote/me') return out(res, 200, { ...remote.device(id), vapid: remote.vapid().publicKey, pushReady: true });
+    if (req.method === 'GET' && path === '/api/remote/me') return out(res, 200, { ...remote.device(id), vapid: remote.vapid().publicKey, pushReady: true, lastPush: pusher.last(id) });
     let body;
     try { body = await readJson(req, 8192); } catch (err) { return out(res, err.status ?? 400, { error: err.message }); }
     if (path === '/api/remote/me/push') {
@@ -332,7 +332,7 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
       secure: servesTls(cfg) || /^https:/.test(cfg.publicUrl ?? ''), publicUrl: cfg.publicUrl || '',
       // Where a phone on your network would look: the addresses, the name, and (with our own certificate) the CA to trust.
       lan: cfg.bind === 'lan' ? { addresses: lanAddresses(), name: localName(), auto: !!cfg.tlsAuto, caFile: cfg.tlsAuto ? join(dir(), 'ca.pem') : null, caFingerprint: cfg.tlsAuto ? caFingerprint(dir()) : null, note: certNote } : null,
-      addresses: cfg.bind === 'lan' ? lanAddresses() : [], devices: remote.devices().map((d) => ({ ...d, open: hub.open(d.id) })), waiting: remote.waiting(), streams: hub.size(),
+      addresses: cfg.bind === 'lan' ? lanAddresses() : [], devices: remote.devices().map((d) => ({ ...d, open: hub.open(d.id), lastPush: pusher.last(d.id) })), waiting: remote.waiting(), streams: hub.size(),
     });
     if (req.method === 'GET' && path === '/api/remote') return json(res, 200, view());
     let body = {};

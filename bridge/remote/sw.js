@@ -46,9 +46,10 @@ self.addEventListener('push', (event) => {
   let note = { title: 'dotpals', body: '', tag: 'dotpals', url: '/' };
   try { note = { ...note, ...event.data.json() }; } catch { try { note.body = event.data.text(); } catch {} }
   event.waitUntil((async () => {
-    // If the app is open and visible, it already shows this live: don't buzz as well.
+    // If the app is open and visible, it already shows this live: don't buzz as well. Except a test (it's pressed
+    // from the open app, so hiding it would make "Send a test" look broken) and a permission prompt.
     const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    if (open.some((c) => c.visibilityState === 'visible') && note.kind !== 'approval') return;
+    if (!note.test && note.kind !== 'approval' && open.some((c) => c.visibilityState === 'visible')) return;
     await self.registration.showNotification(String(note.title).slice(0, 80), {
       body: String(note.body ?? '').slice(0, 200), tag: String(note.tag ?? 'dotpals'), renotify: note.kind === 'approval',
       icon: '/bridge/remote/icons/icon-192.png', badge: '/bridge/remote/icons/icon-96.png', timestamp: Number(note.at) || Date.now(),

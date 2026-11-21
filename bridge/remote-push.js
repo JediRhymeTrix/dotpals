@@ -55,6 +55,7 @@ export function createPusher({ remote, hub, send, vapid, subject, turn, now = Da
   const waiting = new Map(); // session → timer, for "still waiting after 20 s"
   const recent = new Map();  // `${device}|${tag}` → time
   const minute = new Map();  // device → times in the last minute
+  const last = new Map();    // device → what the push service answered last: { at, ok, status } (shown in Settings, so "nothing arrived" can be told from "never sent")
 
   async function deliver(item, only) {
     const t = now();
@@ -75,8 +76,10 @@ export function createPusher({ remote, hub, send, vapid, subject, turn, now = Da
         if (recent.size > 400) for (const [k, v] of recent) if (t - v > 60_000) recent.delete(k);
       }
       const urgent = item.kind === 'approval' || item.kind === 'waiting';
-      const body = JSON.stringify({ kind: item.kind, title: item.title, body: item.body, tag: item.tag, at: t, url: '/#sessions' });
+      const body = JSON.stringify({ kind: item.kind, title: item.title, body: item.body, tag: item.tag, at: t, test: !!item.test, url: item.test ? '/#settings/remote' : '/#sessions' });
       const res = await send(target.sub, body, vapid(), { subject, urgency: urgent ? 'high' : 'normal', ttl: item.kind === 'approval' ? 120 : 3600, topic: item.tag });
+      last.set(target.id, { at: t, ok: !!res.ok, status: res.status ?? 0, gone: !!res.gone, kind: item.kind });
+      if (!res.ok) log(`push: ${target.id} was not delivered (push service answered ${res.status || 'nothing'})`);
       if (res.gone) { remote.update(target.id, { push: null }); log(`push: forgot a dead subscription for ${target.id}`); }
     }
   }
@@ -97,7 +100,8 @@ export function createPusher({ remote, hub, send, vapid, subject, turn, now = Da
       waiting.set(data.session, timer);
     },
     /** A test notification for one device, whatever its preferences. */
-    test: (deviceId) => deliver({ kind: 'done', title: 'dotpals', body: 'Notifications are working on this device.', tag: 'test' }, deviceId),
+    test: (deviceId) => deliver({ kind: 'done', title: 'dotpals', body: 'Notifications are working on this device.', tag: 'test', test: true }, deviceId),
+    last: (deviceId) => last.get(deviceId) ?? null,
     stop() { for (const t of waiting.values()) clearTimeout(t); waiting.clear(); },
   };
 }
