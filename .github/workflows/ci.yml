@@ -164,6 +164,7 @@ jobs:
         include:
           - { os: macos-latest, ext: dmg, target: --mac dmg --arm64, files: 'dotpals-VERSION-mac-arm64.dmg' }
           - { os: windows-latest, ext: exe, target: --win, files: 'dotpals-setup-VERSION-x64.exe dotpals-setup-VERSION-arm64.exe' }
+          - { os: ubuntu-latest, ext: AppImage, target: --linux, files: 'dotpals-VERSION-linux-x64.AppImage dotpals-VERSION-linux-x64.deb' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -203,6 +204,16 @@ jobs:
           Start-Process -Wait -FilePath "$dir\Uninstall dotpals.exe" -ArgumentList '/S'
           Start-Sleep -Seconds 3
           if (Test-Path "$dir\dotpals.exe") { throw "still there after uninstalling" }
+
+      # Linux: the AppImage needs FUSE to run, which CI doesn't have, so the unpacked build (the same files) is started.
+      - name: Start it (unpacked), with a pretend screen
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth libgtk-3-0t64 libnss3 libgbm1 libasound2t64
+          DOTPALS_APP_EXE="$PWD/dist/linux-unpacked/dotpals" xvfb-run -a -s "-screen 0 1280x800x24" node test/smoke/packaged.mjs
 
       - name: Copy it out of the disk image (as an update does), start it
         if: runner.os == 'macOS'

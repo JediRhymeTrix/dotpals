@@ -31,6 +31,19 @@ const own = app.getAppPath();
 const version = app.getVersion();
 const versionOf = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version; } catch { return null; } };
 
+/**
+ * Where releases come from: the repository this build says it was made from (package.json), so a fork's app
+ * updates from the fork's releases and never swaps itself for the original's. DOTPALS_UPDATE_REPO overrides it.
+ */
+function releaseRepo() {
+  const given = String(process.env.DOTPALS_UPDATE_REPO ?? '').trim();
+  if (/^[\w.-]+\/[\w.-]+$/.test(given)) return given;
+  try {
+    const url = JSON.parse(readFileSync(join(own, 'package.json'), 'utf8')).repository?.url ?? '';
+    return /github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url)?.[1] ?? 'rikinshah787/dotpals';
+  } catch { return 'rikinshah787/dotpals'; }
+}
+
 let note; // the update notification, kept so it isn't collected before it's clicked
 let ready; // a downloaded and checked installer of a newer release, until it's installed
 
@@ -124,7 +137,7 @@ async function checkForUpdate() {
   const stamp = join(home(), 'update-check.json');
   try { if (Date.now() - JSON.parse(readFileSync(stamp, 'utf8')).at < 86_400_000) return; } catch {}
   try {
-    const r = await fetch('https://api.github.com/repos/rikinshah787/dotpals/releases/latest', { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10_000) });
+    const r = await fetch(`https://api.github.com/repos/${releaseRepo()}/releases/latest`, { headers: { accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10_000) });
     if (!r.ok) return; // offline, or GitHub's rate limit: try again next time
     const release = await r.json();
     const latest = String(release.tag_name ?? '').replace(/^v/, '');

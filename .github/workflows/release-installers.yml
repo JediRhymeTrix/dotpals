@@ -1,8 +1,9 @@
 name: Release downloads
 
 # Attaches everything people download to each published release:
-#   the app      dotpals-<version>-mac-arm64.dmg / -mac-x64.dmg (Apple silicon, Intel) and
-#                dotpals-setup-<version>-x64.exe / -arm64.exe (one click, no admin), built by
+#   the app      dotpals-<version>-mac-arm64.dmg / -mac-x64.dmg (Apple silicon, Intel),
+#                dotpals-setup-<version>-x64.exe / -arm64.exe (one click, no admin) and
+#                dotpals-<version>-linux-x64.AppImage / .deb (Linux, x64), built by
 #                electron-builder with no Node needed, each started and checked first
 #   installers   dotpals-setup.bat (Windows) and dotpals-setup-mac.zip (dotpals-setup.command,
 #                zipped so it stays runnable once downloaded): they run the one-line installers in site/
@@ -61,6 +62,7 @@ jobs:
         include:
           - { name: macOS, os: macos-latest, target: --mac, exe: dist/mac-arm64/dotpals.app/Contents/MacOS/dotpals, files: 'dist/*.dmg' }
           - { name: Windows, os: windows-latest, target: --win, exe: dist/win-unpacked/dotpals.exe, files: 'dist/*.exe' }
+          - { name: Linux, os: ubuntu-latest, target: --linux, exe: dist/linux-unpacked/dotpals, files: 'dist/*.AppImage dist/*.deb' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -84,11 +86,23 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder ${{ matrix.target }} --publish never
 
+      # Linux: a pretend screen (Xvfb) and the libraries Electron needs.
+      - name: Install Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth libgtk-3-0t64 libnss3 libgbm1 libasound2t64
+
       - name: Start it and check it works without Node
         shell: bash
         env:
           DOTPALS_APP_EXE: ${{ matrix.exe }}
-        run: node test/smoke/packaged.mjs
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a -s "-screen 0 1280x800x24" node test/smoke/packaged.mjs
+          else
+            node test/smoke/packaged.mjs
+          fi
 
       - name: Attach to the release
         shell: bash
@@ -109,7 +123,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir files && cd files
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.dmg' --pattern '*.exe' --pattern '*.zip' --pattern '*.bat'
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.dmg' --pattern '*.exe' --pattern '*.AppImage' --pattern '*.deb' --pattern '*.zip' --pattern '*.bat'
           sha256sum * > ../SHA256SUMS.txt
           cat ../SHA256SUMS.txt
           gh release upload "$TAG" ../SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"

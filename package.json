@@ -26,13 +26,13 @@
     "svg",
     "cute"
   ],
-  "homepage": "https://github.com/rikinshah787/dotpals#readme",
+  "homepage": "https://github.com/JediRhymeTrix/dotpals#readme",
   "bugs": {
-    "url": "https://github.com/rikinshah787/dotpals/issues"
+    "url": "https://github.com/JediRhymeTrix/dotpals/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rikinshah787/dotpals.git"
+    "url": "git+https://github.com/JediRhymeTrix/dotpals.git"
   },
   "license": "MIT",
   "type": "module",
@@ -188,6 +188,38 @@
       "runAfterFinish": true,
       "artifactName": "dotpals-setup-${version}-${arch}.${ext}",
       "shortcutName": "dotpals"
+    },
+    "appImage": {
+      "artifactName": "dotpals-${version}-linux-x64.${ext}"
+    },
+    "deb": {
+      "artifactName": "dotpals-${version}-linux-x64.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "maintainer": "dotpals contributors <noreply@users.noreply.github.com>",
+      "synopsis": "See what your coding agents actually did",
+      "executableName": "dotpals",
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "dotpals"
+        }
+      }
     }
   }
 }
