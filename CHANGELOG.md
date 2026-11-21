@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-21
+
+### Added
+
+- **Remote client.** Use the whole dashboard, settings included, from a phone, tablet or foldable: scan a QR code or type a code to pair, then install it as an app. Off until Settings → Remote turns it on. A second listener (port 5176) keeps the bridge's own `127.0.0.1` one, and agents' hooks, unreachable from a network. A device can look and change how things look; **Let this device control** (per device, set on the computer) adds approvals, hand-offs, rewinds and every setting. See `docs/REMOTE.md`.
+- **Web Push notifications**, chosen per device: a request finished, an agent waiting for you, a permission prompt, stuck, two agents on one file, tests given up on, context nearly full. Encrypted for the device (RFC 8291) and signed (VAPID, RFC 8292) with no dependency, text shortened and secret-redacted, quiet while the app is open.
+- **Real time that costs little.** The live stream is open only while the app is in front of you; coming back it asks for just what it missed. Changes are coalesced, gzip-compressed and cached with ETags; nothing runs with no device connected.
+- **Foldables.** The layout follows the Device Posture and Viewport Segments APIs: one pane per screen across a hinge, content above and controls below when half-open, a side-by-side list and detail on tablets, bottom navigation and 44 px targets on phones, Window Controls Overlay when installed on a desktop.
+- A hand-written PWA: manifest with shortcuts, maskable icons, a service worker, and a pairing page.
+
+### Changed
+
+- Permission prompts can also be answered from a paired device that has the control switch on.
+- The Privacy note now says what the remote client and push do and don't send.
+
 ## [0.13.0] - 2026-11-15
 
 ### Added
