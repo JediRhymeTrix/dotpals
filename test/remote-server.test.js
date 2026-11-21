@@ -198,6 +198,10 @@ test('helpers: hosts, links and the QR', () => {
   assert.equal(pairingUrl(cfg, 'AAAA-BBBB-CCCC'), 'https://dp.example.com/pair#AAAA-BBBB-CCCC');
   assert.equal(pairingUrl({ bind: 'lan', port: 5176, publicUrl: '' }, 'X', ['192.168.1.69']), 'http://192.168.1.69:5176/pair#X');
   assert.equal(pairingUrl({ bind: 'local', port: 5176, publicUrl: '' }, 'X', ['192.168.1.69']), 'http://127.0.0.1:5176/pair#X');
+  // With its own certificate the link is https, so the QR code opens the right thing.
+  const tls = { bind: 'lan', port: 5176, publicUrl: '', tlsCert: 'c.pem', tlsKey: 'k.pem' };
+  assert.equal(pairingUrl(tls, 'X', ['192.168.1.69']), 'https://192.168.1.69:5176/pair#X');
+  assert.equal(pairingUrl({ ...tls, tlsKey: '' }, 'X', ['192.168.1.69']), 'http://192.168.1.69:5176/pair#X'); // half-configured: not https
   const rows = qrRows('https://dp.example.com/pair#AAAA-BBBB-CCCC');
   assert.ok(rows.length >= 21 && rows.every((r) => r.length === rows.length));
 });

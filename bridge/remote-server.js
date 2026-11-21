@@ -42,7 +42,8 @@ export function hostAllowed(host, cfg) {
 
 /** The link a device opens: public address, else this computer's network address (lan), else localhost. The code rides in the #fragment: never sent to a server or logged. */
 export function pairingUrl(cfg, code, lan = lanAddresses()) {
-  const base = cfg.publicUrl || (cfg.bind === 'lan' && lan[0] ? `http://${lan[0]}:${cfg.port}` : `http://127.0.0.1:${cfg.port}`);
+  const scheme = cfg.tlsCert && cfg.tlsKey ? 'https' : 'http'; // serving its own certificate: the link says so
+  const base = cfg.publicUrl || (cfg.bind === 'lan' && lan[0] ? `${scheme}://${lan[0]}:${cfg.port}` : `${scheme}://127.0.0.1:${cfg.port}`);
   return `${base}/pair#${code}`;
 }
 

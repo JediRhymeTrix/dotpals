@@ -10,6 +10,7 @@
 //   dotpals statusline [--off]                share Claude Code's usage limits (for the notch)
 //   dotpals bridge                            run only the bridge (no window)
 //   dotpals laya [--remove]                   set up Laya, the free local test checker (or delete it)
+//   dotpals remote cert                       https for your own network: a private CA and a certificate for this computer, with steps for your phone
 //   dotpals mcp                               an MCP server: any assistant can ask dotpals what your agents did
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, cpSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
@@ -618,6 +619,35 @@ async function laya(flags) {
   finish(s.running ? { ...s, message: 'Laya is set up and answers on this computer' } : s);
 }
 
+/**
+ * `dotpals remote cert`: https on your own network. Makes a private CA (once) and a server certificate for this
+ * computer's addresses, points the remote client at it, and says how to trust the CA on a phone.
+ */
+async function remoteCommand(sub, flags) {
+  if (sub !== 'cert') { console.log('Usage: dotpals remote cert   (https for your own network: see docs/REMOTE.md)'); process.exitCode = sub ? 1 : 0; return; }
+  const { certDir, ensureCerts } = await import('../bridge/remote-cert.js');
+  let made;
+  try { made = ensureCerts({ dir: certDir(home()) }); } catch (err) { warn(err.message); process.exitCode = 1; return; }
+  ok(made.created.ca ? 'Made a private certificate authority (name-restricted to your own network)' : 'Using your existing certificate authority');
+  ok(made.created.cert ? `Made a server certificate for ${made.addresses.join(', ')}` : 'The server certificate is current');
+  saveConfig({ remote: { tlsCert: made.cert, tlsKey: made.key, bind: 'lan' } });
+  ok('Pointed the remote client at it (reachable on your network, over https)');
+  const port = loadConfig().remote.port;
+  console.log(`
+  ${bold('On each phone or tablet, once')}
+    1. Copy ${bold(made.ca)} to it (USB, AirDrop, a file share: it's public, no secret).
+    2. ${bold('Android')}: Settings → Security → More security settings → Encryption & credentials → Install a certificate → CA certificate.
+       ${bold('iPhone/iPad')}: open the file, Settings → Profile Downloaded → Install; then Settings → General → About → Certificate Trust Settings → turn it on.
+    3. Open ${bold(`https://${made.addresses[0]}:${port}/pair`)} (or turn the remote client on in Settings → Remote and scan the QR code).
+
+  ${dim('The CA can only vouch for private addresses and .local names, so installing it can’t make a real website look trusted.')}
+  ${dim('If your computer’s address changes, run this again: it reissues the certificate (the CA stays, so phones keep working).')}
+  ${dim('Firefox on Android keeps its own list: Settings → About → tap the logo 5 times → Secret settings → Use third party CA certificates.')}
+`);
+  if (flags.has('--no-restart')) return;
+  try { await fetch(`${bridge}/api/config`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-dotpals': '1' }, body: JSON.stringify({ remote: { tlsCert: made.cert, tlsKey: made.key, bind: 'lan' } }) }); } catch {}
+}
+
 const [command = 'help', ...rest] = process.argv.slice(2);
 const flags = new Set(rest);
 switch (command) {
@@ -642,6 +672,7 @@ switch (command) {
   // Like `node bridge/server.js`: it quits when setup asks, so the pal can take over.
   case 'bridge': await import('../bridge/server.js').then((m) => m.startBridge({ onQuit: () => process.exit(0) })); break;
   case 'laya': await laya(flags); break;
+  case 'remote': await remoteCommand(rest[0], flags); break;
   // An MCP server on stdin and stdout (bridge/mcp.js): nothing else may print to stdout here.
   case 'mcp': (await import('../bridge/mcp.js')).serve(); break;
   default:
