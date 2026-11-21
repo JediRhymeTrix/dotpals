@@ -108,7 +108,7 @@ html[data-fold="table"] {
 }
 html[data-fold="table"] .app { height: 100dvh; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--seg-top) var(--hinge) var(--seg-bottom); }
 html[data-fold="table"] main { grid-row: 1; padding: calc(12px + var(--safe-t)) 16px 12px; }
-html[data-fold="table"] aside { grid-row: 3; order: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(56px, 1fr); gap: 10px; align-content: center; padding: 14px 16px calc(14px + var(--safe-b)); border: 0; overflow: auto; }
+html[data-fold="table"] aside { grid-row: 3; order: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 64px; gap: 10px; align-content: center; padding: 14px 16px calc(14px + var(--safe-b)); border: 0; overflow: auto; }
 html[data-fold="table"] aside .brand { display: none; }
 html[data-fold="table"] aside .live { display: flex; grid-column: 1 / -1; justify-content: center; margin: 0; }
 html[data-fold="table"] nav { display: contents; }

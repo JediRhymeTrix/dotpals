@@ -38,11 +38,17 @@ export function inlineHashes(html) {
   return out;
 }
 
-/** The CSP for a page with these inline hashes. Only this origin; no inline script but the page's own. */
-export function csp({ script = [], style = [] } = {}) {
+/**
+ * The CSP for a page with these inline-script hashes. Scripts are locked down: only this origin's files
+ * and the page's own inline script, by hash. Styles allow `unsafe-inline`: the pal element builds its
+ * own <style> inside a shadow root and the pages set style attributes, none of which can be hashed
+ * ahead of time (and a style hash would make browsers ignore `unsafe-inline`). Style injection can't
+ * run code, and every other source is still closed (default-src 'none', connect-src 'self').
+ */
+export function csp({ script = [] } = {}) {
   return [
-    "default-src 'none'", `script-src 'self' ${script.join(' ')}`.trim(), `style-src 'self' ${style.join(' ')}`.trim(),
-    "style-src-attr 'unsafe-inline'", "img-src 'self' data: blob:", "connect-src 'self'", "manifest-src 'self'",
+    "default-src 'none'", `script-src 'self' ${script.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:", "connect-src 'self'", "manifest-src 'self'",
     "worker-src 'self'", "font-src 'self'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
   ].join('; ');
 }
@@ -72,7 +78,9 @@ export function createAssets({ root, transform = (path, text) => text, extra = n
     let body = await readFile(file);
     const type = typeOf(target);
     // Only the pages and the service worker are rewritten (once, here); other files go out as they are.
-    if (target.endsWith('.html') || target.endsWith('/sw.js')) body = Buffer.from(transform(target, body.toString('utf8')));
+    // Line endings are made LF first: a browser normalises CRLF before it hashes an inline script, so a
+    // CRLF file (a Windows checkout) would never match the hash we put in the CSP.
+    if (target.endsWith('.html') || target.endsWith('/sw.js')) body = Buffer.from(transform(target, body.toString('utf8').replace(/\r\n/g, '\n')));
     return pack(path, body, type, null, info.mtimeMs);
   }
   function pack(path, body, type, source, mtime) {
