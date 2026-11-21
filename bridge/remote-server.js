@@ -92,9 +92,11 @@ export function createRemoteServer({ config, file, root, version, api, snapshot,
     '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">',
     '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
     '<link rel="apple-touch-icon" href="/bridge/remote/icons/icon-180.png">',
-    '<link rel="stylesheet" href="/bridge/remote/remote.css">', '<script src="/bridge/remote/boot.js"></script>',
+    '<meta name="dotpals-face" content="device">', // the page shows a device's settings, not the computer's (bridge/remote/settings.js)
+    '<link rel="stylesheet" href="/bridge/remote/remote.css">', '<script src="/bridge/remote/boot.js"></script>', '<script src="/bridge/remote/stream.js"></script>',
   ].join('\n');
-  const TAIL = '<script type="module" src="/bridge/remote/settings.js"></script>\n<script type="module" src="/bridge/remote/client.js"></script>\n';
+  // settings.js is part of the dashboard itself (the computer needs it too); client.js is only for devices.
+  const TAIL = '<script type="module" src="/bridge/remote/client.js"></script>\n';
   const transform = (target, text) => {
     if (target.endsWith('/sw.js')) return text.replace('__VERSION__', version);
     if (!target.endsWith('.html') || target.endsWith('/pair.html')) return text;

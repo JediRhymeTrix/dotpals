@@ -670,7 +670,7 @@
       <section class="view" id="view-settings" aria-labelledby="t-settings" hidden>
         <div class="head"><h1 id="t-settings">Settings</h1><span class="spacer"></span><span class="faint" id="saved"></span></div>
         <div class="seg stabs" role="group" aria-label="Settings" id="s-tabs">
-          <button type="button" data-tab="pal">Pal</button><button type="button" data-tab="agents">Agents</button><button type="button" data-tab="blu">Blu</button><button type="button" data-tab="apps">Apps</button><button type="button" data-tab="more">History &amp; about</button>
+          <button type="button" data-tab="pal">Pal</button><button type="button" data-tab="agents">Agents</button><button type="button" data-tab="blu">Blu</button><button type="button" data-tab="apps">Apps</button><button type="button" data-tab="remote">Remote</button><button type="button" data-tab="more">History &amp; about</button>
         </div>
         <div class="settings">
           <div class="card" data-tab="pal">
@@ -869,6 +869,8 @@
             <div class="row" id="c-test-row" hidden><div class="text">Test connection<small id="c-test-note">One tiny request, to check the checker answers.</small></div><button type="button" id="c-sdk" hidden>Install it</button><button type="button" id="c-test">Test connection</button></div>
             <div id="c-checks" class="checks" hidden></div>
           </div>
+
+          <div class="card" data-tab="remote" id="remote-card"><h2>Remote</h2><p class="muted" id="remote-loading">Loading…</p></div>
 
           <div class="card" data-tab="more">
             <h2>History</h2>
@@ -2714,7 +2716,7 @@
     renderApps();
 
     // -- Settings, a tab at a time (#settings/<tab>) -------------------------------------------
-    const SETTINGS_TABS = ['pal', 'agents', 'blu', 'apps', 'more'];
+    const SETTINGS_TABS = ['pal', 'agents', 'blu', 'apps', 'remote', 'more'];
     let settingsTab = (() => { try { return localStorage.getItem('dotpals.settings.tab'); } catch { return null; } })() || 'pal';
     function showSettingsTab(tab) {
       settingsTab = SETTINGS_TABS.includes(tab) ? tab : 'pal';
@@ -3236,5 +3238,6 @@ npm test && s=done || s=error; curl -s ${url} -d "{\\"session\\":\\"sh\\",\\"har
 
     route();
   </script>
+  <script type="module" src="/bridge/remote/settings.js"></script>
 </body>
 </html>

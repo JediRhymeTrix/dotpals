@@ -132,6 +132,27 @@ test('static files are served with an ETag, revalidate with 304, and the bridge 
   }
 });
 
+test('the dashboard is served as an installable app with a strict, hash-based CSP', async () => {
+  const res = await R('/');
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  for (const tag of ['rel="manifest"', 'name="dotpals-face" content="device"', 'viewport-fit=cover', '/bridge/remote/boot.js', '/bridge/remote/stream.js', '/bridge/remote/remote.css', '/bridge/remote/client.js', '/bridge/remote/settings.js']) assert.ok(html.includes(tag), tag);
+  const csp = res.headers.get('content-security-policy');
+  assert.match(csp, /default-src 'none'/);
+  assert.match(csp, /script-src 'self' 'sha256-[\w+/=]+'/);
+  assert.ok(!/script-src[^;]*unsafe-inline/.test(csp));
+  assert.match(csp, /frame-ancestors 'none'/);
+  const manifest = await (await R('/manifest.webmanifest')).json();
+  assert.equal(manifest.display, 'standalone');
+  assert.ok(manifest.icons.some((i) => i.purpose === 'maskable'));
+  for (const i of manifest.icons) assert.equal((await R(i.src)).status, 200, i.src);
+  const sw = await (await R('/sw.js')).text();
+  assert.ok(!sw.includes('__VERSION__'));
+  assert.equal((await R('/pair')).status, 200);
+  assert.equal((await R('/bridge/remote/pair.js')).status, 200);
+  assert.equal((await R('/bridge/vendor/qrcode.js')).status, 200);
+});
+
 async function readUntilReady(reader) {
   const dec = new TextDecoder();
   let text = '';
