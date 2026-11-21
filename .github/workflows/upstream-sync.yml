@@ -1,0 +1,91 @@
+name: Upstream sync
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      github.repository == 'JediRhymeTrix/dotpals' && github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.conclusion != 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      statuses: read
+    outputs:
+      state: ${{ steps.sync.outputs.state }}
+      base: ${{ steps.sync.outputs.base }}
+      upstream: ${{ steps.sync.outputs.upstream }}
+      sha: ${{ steps.sync.outputs.sha }}
+      branch: ${{ steps.sync.outputs.branch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      # Save the trusted script outside the worktree before checking out/rebasing upstream code.
+      - name: Save orchestration code
+        run: cp scripts/upstream-sync.mjs "$RUNNER_TEMP/upstream-sync.mjs"
+      - name: Prepare rebase or open repair PR
+        id: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$RUNNER_TEMP/upstream-sync.mjs" prepare
+
+  ci:
+    needs: prepare
+    if: needs.prepare.outputs.state == 'candidate'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout-ref: ${{ needs.prepare.outputs.sha }}
+
+  finish:
+    needs: [prepare, ci]
+    if: ${{ always() && needs.prepare.result == 'success' && needs.prepare.outputs.state == 'candidate' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      # Fresh runner, trusted workflow commit, no artifacts or code from the candidate CI jobs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Promote tested candidate or open repair PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_BASE: ${{ needs.prepare.outputs.base }}
+          SYNC_UPSTREAM: ${{ needs.prepare.outputs.upstream }}
+          SYNC_SHA: ${{ needs.prepare.outputs.sha }}
+          SYNC_BRANCH: ${{ needs.prepare.outputs.branch }}
+          SYNC_CI_RESULT: ${{ needs.ci.result }}
+        run: node scripts/upstream-sync.mjs finish

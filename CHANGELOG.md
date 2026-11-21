@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Fork-only daily upstream-rebase attempts, gated by exact-commit full CI, atomic backup/lease-protected promotion and draft repair PRs on conflicts or failed CI. Open repair PRs pause further attempts. See `docs/FORK-SYNC.md`.
 - Explicit PWA update checks on startup, resume (throttled) and request. A complete, build-specific shell waits for Update; the requesting page reloads once. Failed registration/check/activation can be retried. Legacy workers may take over once without forcing a page reload.
 - Push receipts, ten-entry per-device in-memory history and phone-local worker/last-push metadata. Receipts correlate to the original send even when late, concurrent or out of order.
 

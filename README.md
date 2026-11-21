@@ -203,6 +203,8 @@ To uninstall (the hooks, the MCP server, the `dotpals` command, the app and `~/.
 
 Settings → Remote turns on an installable app version of the dashboard for your phone, tablet or foldable: pair with a QR code, install it, and choose which notifications reach you. It keeps a connection open only while it's in front of you, and lays out for a fold. Set-up, what a device may do, and how it's secured: **[docs/REMOTE.md](docs/REMOTE.md)**.
 
+Fork maintenance: this fork checks upstream daily, tests rebases before updating `main`, and opens a fork repair PR on conflicts or failed CI. See **[docs/FORK-SYNC.md](docs/FORK-SYNC.md)** for safeguards and how to pause it.
+
 ## Ask dotpals from any agent (MCP)
 
 `dotpals mcp` is an [MCP](https://modelcontextprotocol.io) server: Claude Code, Codex, Cursor and other assistants ask dotpals what your agents really did, and get the evidence instead of the agent's word. It only reads, from the pal running on this computer.
