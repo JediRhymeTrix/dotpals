@@ -58,15 +58,9 @@ export function csp({ script = [] } = {}) {
  * text file once (the dashboard gets the manifest link and the client scripts); it's re-read when
  * the file's time changes. Compression is done once, in the background, and used when it's ready.
  */
-export function createAssets({ root, transform = (path, text) => text, extra = new Map() } = {}) {
+export function createAssets({ root, transform = (path, text) => text } = {}) {
   const cache = new Map();
   async function load(path) {
-    if (extra.has(path)) {
-      const e = extra.get(path);
-      const hit = cache.get(path);
-      if (hit && hit.source === e) return hit;
-      return pack(path, Buffer.from(e.body), e.type, e, 0);
-    }
     const target = ALIASES[path] ?? path;
     const file = normalize(join(root, target));
     if (!file.startsWith(root)) return null;
@@ -81,10 +75,10 @@ export function createAssets({ root, transform = (path, text) => text, extra = n
     // Line endings are made LF first: a browser normalises CRLF before it hashes an inline script, so a
     // CRLF file (a Windows checkout) would never match the hash we put in the CSP.
     if (target.endsWith('.html') || target.endsWith('/sw.js')) body = Buffer.from(transform(target, body.toString('utf8').replace(/\r\n/g, '\n')));
-    return pack(path, body, type, null, info.mtimeMs);
+    return pack(path, body, type, info.mtimeMs);
   }
-  function pack(path, body, type, source, mtime) {
-    const entry = { body, type, source, mtime, etag: `"${sha(body, 'sha1').slice(0, 27)}"`, br: null, gz: null };
+  function pack(path, body, type, mtime) {
+    const entry = { body, type, mtime, etag: `"${sha(body, 'sha1').slice(0, 27)}"`, br: null, gz: null };
     if (type.startsWith('text/') || type.includes('json') || type.includes('javascript') || type.includes('svg')) {
       brotli(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 9, [constants.BROTLI_PARAM_SIZE_HINT]: body.length } }).then((b) => { entry.br = b; }).catch(() => {});
       gz(body, { level: 9 }).then((b) => { entry.gz = b; }).catch(() => {});

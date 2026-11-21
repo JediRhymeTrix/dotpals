@@ -106,6 +106,40 @@ test('a paired device can read, but not run things', async () => {
   assert.equal((await R('/api/status', { method: 'POST', headers: { cookie } })).status, 403); // no x-dotpals
 });
 
+test('remote management never mutates state through GET or HEAD', async () => {
+  for (const method of ['GET', 'HEAD']) {
+    for (const path of ['/api/remote/pair', '/api/remote/pair/cancel', '/api/remote/revoke-all', `/api/remote/devices/${deviceId}/revoke`]) {
+      assert.equal((await fetch(`http://127.0.0.1:${ctx.main}${path}`, { method })).status, 405, path);
+    }
+    for (const path of ['/api/remote/me/signout', '/api/remote/me/push', '/api/remote/me/test', '/api/remote/me/prefs']) {
+      assert.equal((await R(path, { method, headers: { cookie } })).status, 405, path);
+    }
+  }
+  assert.equal((await R('/api/remote/me', { headers: { cookie } })).status, 200);
+});
+
+test('device diagnostics reject scalar/array JSON and acknowledgements need authentication and CSRF headers', async () => {
+  for (const body of ['null', '[]', '42', '"text"', '{']) {
+    assert.equal((await R('/api/remote/me/ack', { method: 'POST', headers: { cookie, 'x-dotpals': '1' }, body })).status, 400);
+  }
+  assert.equal((await post('/api/remote/me/ack', { sentAt: 1 })).status, 401);
+  assert.equal((await R('/api/remote/me/ack', { method: 'POST', headers: { cookie }, body: '{}' })).status, 403);
+  assert.equal((await R('/api/remote/me/ack', { method: 'POST', headers: { cookie, 'x-dotpals': '1', origin: 'https://evil.example' }, body: '{}' })).status, 403);
+  assert.deepEqual(await (await post('/api/remote/me/ack', { sentAt: 1, shown: true }, cookie)).json(), { ok: false }, 'unmatched receipt is not invented history');
+});
+
+test('a browser-origin Talk request passes only for a controlling device from the admitted origin', async () => {
+  const headers = { cookie, 'x-dotpals': '1', 'content-type': 'application/json', host: 'paired.example', origin: 'https://paired.example', 'x-forwarded-proto': 'https' };
+  await M('/api/config', { remote: { publicUrl: 'https://paired.example' } });
+  assert.equal((await R('/api/talk/plan', { method: 'POST', headers, body: '{}' })).status, 403);
+  await M(`/api/remote/devices/${deviceId}`, { control: true });
+  assert.equal((await R('/api/talk/plan', { method: 'POST', headers, body: '{}' })).status, 400, 'the request reaches validation, not the local-only Origin gate');
+  assert.equal((await R('/api/talk/plan', { method: 'POST', headers: { ...headers, origin: 'https://evil.example' }, body: '{}' })).status, 403);
+  assert.equal((await fetch(`http://127.0.0.1:${ctx.main}/api/talk/plan`, { method: 'POST', headers, body: '{}' })).status, 403, 'the local listener never trusts a claimed remote origin');
+  await M(`/api/remote/devices/${deviceId}`, { control: false });
+  await M('/api/config', { remote: { publicUrl: '' } });
+});
+
 test('settings: safe ones change, powerful ones need the control switch', async () => {
   const ok = await post('/api/config', { sounds: false }, cookie);
   assert.equal(ok.status, 200);
@@ -119,6 +153,25 @@ test('settings: safe ones change, powerful ones need the control switch', async 
   assert.equal(remoteEdit.status, 403); // never from a device, even with control
   assert.equal((await (await M('/api/remote')).json()).running, true);
   await M(`/api/remote/devices/${deviceId}`, { control: false });
+});
+
+test('a controlling remote stream without approval cards does not intercept a terminal permission prompt', async () => {
+  await M(`/api/remote/devices/${deviceId}`, { control: true });
+  await M('/api/config', { approvals: true });
+  const stream = await R('/events', { headers: { cookie } });
+  const reader = stream.body.getReader();
+  await readUntilReady(reader);
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 2000);
+  try {
+    const res = await fetch(`http://127.0.0.1:${ctx.main}/hook`, { method: 'POST', signal: abort.signal, body: JSON.stringify({ hook_event_name: 'PermissionRequest', session_id: 'remote-no-cards', tool_name: 'Bash', tool_input: { command: 'npm test' } }) });
+    assert.deepEqual(await res.json(), {});
+  } finally {
+    clearTimeout(timeout);
+    await reader.cancel();
+    await M('/api/config', { approvals: false });
+    await M(`/api/remote/devices/${deviceId}`, { control: false });
+  }
 });
 
 test('static files are served with an ETag, revalidate with 304, and the bridge source stays private', async () => {

@@ -2646,7 +2646,7 @@
         const row = el('div', 'row app-row');
         const text = el('div', 'text');
         text.append(el('b', '', app.name), el('small', app.error ? 'bad' : app.status === 'connected' ? 'ok' : '',
-          app.error ? `Not working: ${app.error}` : `${STATUS[app.status] ?? app.status}${app.tools ? ` · ${app.tools} tools` : ''} · ${app.url ?? app.command}`));
+          app.error ? `Not working: ${app.error}` : `${STATUS[app.status] ?? app.status}${app.tools ? ` · ${app.tools} tools` : ''} · ${app.url ?? 'Local command (private)'}`));
         const acts = el('div', 'acts');
         const btn = (label, fn, cls) => { const b = el('button', cls ?? '', label); b.type = 'button'; b.onclick = fn; return b; };
         if (app.url) acts.append(btn(app.status === 'connected' ? 'Sign in again' : 'Sign in', () => signInApp(app), app.status === 'connected' ? '' : 'primary'));
@@ -2656,7 +2656,7 @@
       }));
       if (!a?.mine?.length) $('a-mine').replaceChildren(el('div', 'row', !a ? 'Couldn’t ask. Is the bridge running?' : 'None yet: add one below.'));
       // One click each; one that's added already isn't offered again.
-      $('a-presets').replaceChildren(...Object.entries(a?.presets ?? {}).filter(([, p]) => !a.mine.some((m) => m.url === p.url)).map(([id, p]) => {
+      $('a-presets').replaceChildren(...Object.entries(a?.presets ?? {}).filter(([, p]) => !a.mine.some((m) => m.url === new URL(p.url).origin)).map(([id, p]) => {
         const b = el('button', '', p.name);
         b.type = 'button';
         b.onclick = () => addPreset(id, p);

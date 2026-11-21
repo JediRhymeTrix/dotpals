@@ -113,6 +113,21 @@ test('connectors: a token about to run out is renewed with its refresh token', a
   c.close();
 });
 
+test('connector views never expose credentials embedded in command arguments or URLs', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'dotpals-apps-private-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const file = join(dir, 'apps.json');
+  const c = createConnectors({ file, redirect: 'http://127.0.0.1:5175/api/apps/callback' });
+  const secret = 'synthetic-connector-credential';
+  c.add({ name: 'Private command', command: `npx test-mcp --api-key ${secret}` });
+  c.add({ name: 'Private address', url: `https://user:${secret}@mcp.example.com/${secret}?token=${secret}` });
+  assert.ok(!(JSON.stringify(c.list()).includes(secret)), 'page/API/event views omit private launch details');
+  assert.equal(c.list()[0].command, undefined);
+  assert.equal(c.list()[1].url, 'https://mcp.example.com');
+  assert.ok((await readFile(file, 'utf8')).includes(secret), 'private connector configuration remains usable');
+  c.close();
+});
+
 test('connectors: names, addresses and commands are checked; an app like Google needs your own client', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'dotpals-apps-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

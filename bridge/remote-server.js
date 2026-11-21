@@ -76,7 +76,13 @@ const readJson = (req, max = 4096) => new Promise((ok, fail) => {
   const chunks = [];
   let size = 0;
   req.on('data', (c) => { size += c.length; if (size > max) { fail(Object.assign(new Error('too large'), { status: 413 })); req.destroy(); } else chunks.push(c); });
-  req.on('end', () => { try { ok(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { fail(Object.assign(new Error('bad json'), { status: 400 })); } });
+  req.on('end', () => {
+    try {
+      const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+      if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('bad json');
+      ok(body);
+    } catch { fail(Object.assign(new Error('bad json'), { status: 400 })); }
+  });
   req.on('error', fail);
 });
 const readBuffer = (req, max = 1024 * 1024) => new Promise((ok, fail) => {
@@ -88,7 +94,7 @@ const readBuffer = (req, max = 1024 * 1024) => new Promise((ok, fail) => {
 });
 const out = (res, status, data, extra = {}) => res.writeHead(status, { ...SECURITY, 'content-type': 'application/json', 'cache-control': 'no-store', ...extra }).end(JSON.stringify(data));
 const loopback = (a = '') => /^(127\.|::1$|::ffff:127\.)/.test(a);
-const REPO = 'https://github.com/JediRhymeTrix/dotpals'; // the VAPID contact: push services want a mailto: or https URL
+const REPO = 'https://github.com/rikinshah787/dotpals'; // VAPID requires a contact URL, not a credential
 
 /** A body shaped like the original request, for handing the bridge a changed one. */
 const shim = (req, text) => Object.assign(Readable.from([Buffer.from(text)]), { method: req.method, url: req.url, headers: { ...req.headers, 'content-length': String(Buffer.byteLength(text)) } });
@@ -188,7 +194,8 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
   /** The device's own page of API: who am I, my push subscription and preferences, sign out. */
   async function meApi(req, res, path, device) {
     const id = device.id;
-    if (req.method === 'GET' && path === '/api/remote/me') return out(res, 200, { ...remote.device(id), vapid: remote.vapid().publicKey, pushReady: true, lastPush: pusher.last(id) });
+    if (req.method === 'GET' && path === '/api/remote/me') return out(res, 200, { ...remote.device(id), vapid: remote.vapid().publicKey, pushReady: true, lastPush: pusher.last(id), pushes: pusher.history(id), version });
+    if (req.method !== 'POST') return out(res, 405, { error: 'method not allowed' }, { allow: 'POST' });
     let body;
     try { body = await readJson(req, 8192); } catch (err) { return out(res, err.status ?? 400, { error: err.message }); }
     if (path === '/api/remote/me/push') {
@@ -197,11 +204,13 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
       if (body.subscription) pusher.test(id).catch(() => {});
       return out(res, 200, updated);
     }
+    if (path === '/api/remote/me/ack') return out(res, 200, { ok: pusher.ack(id, body) });
     if (path === '/api/remote/me/prefs') return out(res, 200, remote.update(id, { prefs: body.prefs, name: body.name }));
     if (path === '/api/remote/me/test') { pusher.test(id).catch(() => {}); return out(res, 200, { ok: true }); }
     if (path === '/api/remote/me/signout') {
       remote.revoke(id);
       hub.drop(id);
+      pusher.forget(id);
       return out(res, 200, { ok: true }, { 'set-cookie': cookieHeader('', 0, true), 'clear-site-data': '"cache", "storage"' });
     }
     return out(res, 404, { error: 'not found' });
@@ -332,11 +341,13 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
       secure: servesTls(cfg) || /^https:/.test(cfg.publicUrl ?? ''), publicUrl: cfg.publicUrl || '',
       // Where a phone on your network would look: the addresses, the name, and (with our own certificate) the CA to trust.
       lan: cfg.bind === 'lan' ? { addresses: lanAddresses(), name: localName(), auto: !!cfg.tlsAuto, caFile: cfg.tlsAuto ? join(dir(), 'ca.pem') : null, caFingerprint: cfg.tlsAuto ? caFingerprint(dir()) : null, note: certNote } : null,
-      addresses: cfg.bind === 'lan' ? lanAddresses() : [], devices: remote.devices().map((d) => ({ ...d, open: hub.open(d.id), lastPush: pusher.last(d.id) })), waiting: remote.waiting(), streams: hub.size(),
+      addresses: cfg.bind === 'lan' ? lanAddresses() : [], devices: remote.devices().map((d) => ({ ...d, open: hub.open(d.id), lastPush: pusher.last(d.id), pushes: pusher.history(d.id) })), waiting: remote.waiting(), streams: hub.size(),
     });
     if (req.method === 'GET' && path === '/api/remote') return json(res, 200, view());
+    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
     let body = {};
     try { body = JSON.parse((await readBody(req)) || '{}'); } catch { return json(res, 400, { error: 'bad json' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json(res, 400, { error: 'bad json' });
     if (path === '/api/remote/pair') {
       if (!server) return json(res, 409, { error: 'The remote client is off. Turn it on first.' });
       const { token, expiresAt } = remote.startPairing();
@@ -346,10 +357,10 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
       return json(res, 200, { code: token, expiresAt, url, byName, secure: /^https:/.test(url), qr: qrRows(url) });
     }
     if (path === '/api/remote/pair/cancel') { remote.cancelPairing(); return json(res, 200, { ok: true }); }
-    if (path === '/api/remote/revoke-all') { for (const d of remote.devices()) hub.drop(d.id); remote.revokeAll(); return json(res, 200, view()); }
+    if (path === '/api/remote/revoke-all') { for (const d of remote.devices()) { hub.drop(d.id); pusher.forget(d.id); } remote.revokeAll(); return json(res, 200, view()); }
     const one = /^\/api\/remote\/devices\/([\w-]{8,32})(?:\/(revoke|test))?$/.exec(path);
     if (!one) return json(res, 404, { error: 'not found' });
-    if (one[2] === 'revoke') { hub.drop(one[1]); return json(res, remote.revoke(one[1]) ? 200 : 404, view()); }
+    if (one[2] === 'revoke') { hub.drop(one[1]); pusher.forget(one[1]); return json(res, remote.revoke(one[1]) ? 200 : 404, view()); }
     if (one[2] === 'test') { pusher.test(one[1]).catch(() => {}); return json(res, 200, { ok: true }); }
     const updated = remote.update(one[1], { name: body.name, control: body.control, prefs: body.prefs });
     return updated ? json(res, 200, view()) : json(res, 404, { error: 'no such device' });
@@ -357,7 +368,5 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
 
   return {
     remote, hub, apply, controlApi, onEvent, state: () => ({ running: !!server, error: lastError, note: certNote, addresses: addressesSeen }), stop: async () => { pusher.stop(); await stop(); },
-    /** A paired device that may answer permission prompts has the app open right now. */
-    canAnswer: () => remote.devices().some((d) => d.control && hub.open(d.id)),
   };
 }

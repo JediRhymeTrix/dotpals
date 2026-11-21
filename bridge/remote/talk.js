@@ -27,7 +27,8 @@ const smallPal = (character, size, state) => {
 const sessions = () => window.dotpalsPals?.sessions() ?? [];
 
 addEventListener('dotpals:activity', (e) => keepEntries(entries, e.detail));
-addEventListener('dotpals:reset', () => entries.clear());
+addEventListener('dotpals:reset', () => { entries.clear(); paintStory(); });
+for (const entry of window.dotpalsStream?.snapshot().activity ?? []) keepEntries(entries, entry);
 
 /** { ok, why } for a kind of ask: this device's control switch, and the AI the computer picked for it. */
 async function gate(job) {
@@ -119,7 +120,12 @@ async function ask(text) {
     if (!res.ok) throw new Error(data.error || `The computer said ${res.status}`);
     island.note.textContent = '';
     if (data.plan) card(data.plan);
-    else island.answer.append(make('p', 'rc-say', data.say || data.reply || 'Okay.'), ...(data.words ?? []).map((w) => make('p', 'rc-did', `Blu will: ${w}`)));
+    else {
+      const unavailable = data.do?.length || data.apps || data.task || data.words?.length;
+      island.answer.append(make('p', 'rc-say', unavailable
+        ? 'Desktop actions and connectors are unavailable from remote. Use Talk on the desktop to do this.'
+        : data.say || data.reply || 'Okay.'));
+    }
     island.blu.setAttribute('state', 'speaking');
     island.input.value = '';
   } catch (err) {
@@ -174,4 +180,3 @@ export function hide() {
 addEventListener('dotpals:talk', () => (island && !island.el.hidden ? hide() : show()));
 addEventListener('dotpals:state', paintStory);
 addEventListener('dotpals:activity', paintStory);
-

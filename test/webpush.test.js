@@ -51,6 +51,9 @@ test('VAPID: a generated key signs a token the public key verifies', () => {
 test('only real https push services are accepted as endpoints', () => {
   assert.ok(pushEndpoint('https://fcm.googleapis.com/fcm/send/abc'));
   assert.ok(pushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/x'));
+  assert.ok(pushEndpoint('https://web.push.apple.com/x'));
+  assert.ok(pushEndpoint('https://wns2-pn2p.notify.windows.com/w/?token=x'));
+  for (const bad of ['https://attacker.example/x', 'https://fcm.googleapis.com.evil.example/x', 'https://evilnotify.windows.com/x', 'https://notify.windows.com.evil.example/x']) assert.equal(pushEndpoint(bad), null);
   for (const bad of ['http://fcm.googleapis.com/x', 'https://127.0.0.1/x', 'https://localhost/x', 'https://192.168.1.5/x', 'https://[::1]/x', 'https://intranet/x', 'https://u:p@fcm.googleapis.com/x', 'https://push.example.com:8443/x', 'nope', '', null]) assert.equal(pushEndpoint(bad), null, String(bad));
 });
 

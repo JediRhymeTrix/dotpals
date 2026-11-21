@@ -54,13 +54,13 @@ export function vapidHeader(endpoint, { publicKey, privateKey }, subject, now = 
   return `vapid t=${input}.${b64u(sig)}, k=${publicKey}`;
 }
 
-/** Only real push services: https, a public host. Stops a pairing from making the bridge call something inside your network. */
+/** Only browser push providers, not arbitrary DNS names which could resolve inside your network. */
 export function pushEndpoint(value) {
   try {
     const u = new URL(String(value));
     if (u.protocol !== 'https:' || u.username || u.password || (u.port && u.port !== '443')) return null;
     const h = u.hostname.toLowerCase();
-    if (!h.includes('.') || /^[\d.]+$/.test(h) || h.includes(':') || /(^|\.)(localhost|local|internal|lan|home)$/.test(h)) return null;
+    if (!['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'web.push.apple.com'].includes(h) && !/^[a-z0-9-]+\.notify\.windows\.com$/.test(h)) return null;
     return u.href;
   } catch { return null; }
 }

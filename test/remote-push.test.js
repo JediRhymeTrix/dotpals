@@ -92,6 +92,124 @@ test('with no device subscribed, nothing is sent and no timers are started', asy
   assert.equal(r.sent.length, 0);
 });
 
+test('each test has a tag of its own, which is also a valid Topic (letters, digits, - and _ only)', async () => {
+  const r = rig([dev('a')]);
+  await r.pusher.test('a');
+  r.tick(1000);
+  await r.pusher.test('a');
+  const [one, two] = r.sent.map((s) => s.body.tag);
+  assert.notEqual(one, two, 'the same tag would make Android replace the first one silently');
+  assert.match(one, /^test-[a-z0-9]+$/);
+  assert.match(r.sent[0].o.topic, /^test-[a-z0-9]+$/);
+});
+
+test('a test requests high urgency without changing ordinary notifications', async () => {
+  const r = rig([dev('a')]);
+  await r.pusher.test('a');
+  assert.equal(r.sent[0].o.urgency, 'high');
+  r.pusher.handle('message', { state: 'done', session: 's2', harness: 'claude' });
+  await wait(10);
+  assert.equal(r.sent.at(-1).o.urgency, 'normal', 'an ordinary "done" stays normal');
+});
+
+test('context labels are redacted at the send boundary and quietWhenOpen reaches the worker', async () => {
+  const r = rig([dev('a', { context: true, quietWhenOpen: false })], { open: ['a'] });
+  r.pusher.handle('context', { session: 'x', known: true, used: 95, size: 100, label: 'token sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789' });
+  await wait(10);
+  assert.equal(r.sent.length, 1);
+  assert.equal(r.sent[0].body.quietWhenOpen, false);
+  assert.ok(!r.sent[0].body.body.includes('abcdefghijklmnopqrstuvwxyz0123456789'));
+});
+
+test('revoking a device forgets its diagnostics', async () => {
+  const r = rig([dev('a')]);
+  await r.pusher.test('a');
+  r.pusher.forget('a');
+  assert.equal(r.pusher.last('a'), null);
+  assert.deepEqual(r.pusher.history('a'), []);
+});
+
+test('same-millisecond tests stay distinct and unknown receipts cannot replace known ones', async () => {
+  const r = rig([dev('a')]);
+  await r.pusher.test('a');
+  const first = r.pusher.last('a').at;
+  await r.pusher.test('a');
+  const second = r.pusher.last('a').at;
+  assert.notEqual(first, second);
+  assert.notEqual(r.sent[0].body.tag, r.sent[1].body.tag);
+  assert.equal(r.pusher.ack('a', { sentAt: second, shown: true }), true);
+  assert.equal(r.pusher.ack('a', { sentAt: -1, shown: true }), false);
+  assert.equal(r.pusher.ack('a', { sentAt: String(second), shown: true }), false);
+  assert.ok(r.pusher.last('a').ack.shown);
+  assert.equal(r.pusher.ack('a', { sentAt: first, held: true }), true);
+  assert.ok(r.pusher.last('a').ack.shown, 'an older receipt cannot hide the latest receipt');
+});
+
+test('receipts can arrive before the push service responds and responses may finish out of order', async () => {
+  const pending = [];
+  const pusher = createPusher({
+    remote: { pushTargets: () => [dev('a')], update() {} }, hub: { open: () => false }, vapid: () => ({}),
+    send: (sub, body) => new Promise((resolve) => pending.push({ note: JSON.parse(body), resolve })),
+  });
+  const one = pusher.test('a');
+  const two = pusher.test('a');
+  assert.equal(pusher.ack('a', { sentAt: pending[0].note.at, shown: true }), true);
+  pending[1].resolve({ ok: true, status: 201 });
+  await two;
+  pending[0].resolve({ ok: true, status: 201 });
+  await one;
+  assert.equal(pusher.last('a').at, pending[1].note.at, 'latest means sent latest, not response latest');
+  assert.ok(pusher.history('a')[1].ack.shown);
+});
+
+test('a late receipt lands on ITS push, so pressing Send a test twice cannot hide whether the first one arrived', async () => {
+  const r = rig([dev('a')]);
+  await r.pusher.test('a');
+  const first = r.pusher.last('a').at;
+  r.tick(5000);
+  await r.pusher.test('a');
+  const second = r.pusher.last('a').at;
+  assert.notEqual(first, second);
+  // Only the SECOND one's receipt comes back (the first never arrived).
+  r.pusher.ack('a', { sentAt: second, shown: true });
+  const h = r.pusher.history('a');
+  assert.equal(h.length, 2);
+  assert.equal(h[0].at, second, 'newest first');
+  assert.ok(h[0].ack?.shown, 'the second has its receipt');
+  assert.equal(h[1].ack, undefined, 'the first has none: it did not arrive');
+  // And if the first one's receipt turns up LATE, it is filed under the first, not mistaken for the latest.
+  r.tick(5000);
+  r.pusher.ack('a', { sentAt: first, shown: true });
+  const again = r.pusher.history('a');
+  assert.ok(again[1].ack?.shown, 'the late receipt reached the first push');
+  assert.equal(again[0].ack.sentAt, second, 'and the second keeps its own');
+  // Bounded.
+  for (let i = 0; i < 15; i++) { r.tick(1000); await r.pusher.test('a'); }
+  assert.equal(r.pusher.history('a').length, 10);
+  assert.deepEqual(r.pusher.history('nobody'), []);
+});
+
+test('the phone’s ack is kept for the push it names, and only that one', async () => {
+  const r = rig([dev('a')]);
+  assert.equal(r.pusher.ack('a', null), false);
+  assert.equal(r.pusher.ack('a', 'junk'), false);
+  await r.pusher.test('a');
+  const at = r.pusher.last('a').at;
+  assert.equal(r.pusher.last('a').ack, undefined, 'sent, nothing heard yet: the page says "waiting", then "never arrived"');
+  assert.equal(r.pusher.ack('a', { sentAt: at, shown: true, held: false, error: '' }), true);
+  assert.deepEqual({ shown: r.pusher.last('a').ack.shown, held: r.pusher.last('a').ack.held }, { shown: true, held: false });
+  // An ack for an OLDER push must not make a newer, unacknowledged one look delivered.
+  r.tick(5000);
+  await r.pusher.test('a');
+  assert.equal(r.pusher.last('a').ack, undefined);
+  // What a phone may say is bounded: nothing it sends is trusted as anything but a flag and a short note.
+  r.pusher.ack('a', { sentAt: r.pusher.last('a').at, shown: 'yes', held: 1, error: 'x'.repeat(500) + '\n\n   y' });
+  const a = r.pusher.last('a').ack;
+  assert.equal(a.shown, false, 'only a real true counts');
+  assert.equal(a.held, false);
+  assert.ok(a.error.length <= 80 && !a.error.includes('\n'));
+});
+
 test('the test notification goes to one device whatever its preferences', async () => {
   const r = rig([dev('a', { done: false }), dev('b')]);
   assert.equal(r.pusher.last('a'), null, 'nothing sent yet');

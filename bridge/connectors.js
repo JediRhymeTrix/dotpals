@@ -127,7 +127,7 @@ export function createConnectors({ file, redirect, fetchFn = fetch, spawn = node
   const state = (id) => { if (!live.has(id)) live.set(id, {}); return live.get(id); };
 
   /** What a page may see: no tokens, no secrets. */
-  const view = (a) => ({ id: a.id, name: a.name, kind: a.kind, ...(a.url ? { url: a.url } : { command: a.command }), status: a.kind === 'stdio' || a.auth?.tokens || a.open ? 'connected' : 'sign-in', ...(a.error ? { error: a.error } : {}), ...(a.tools ? { tools: a.tools } : {}), ownClient: !!a.ownClient, hasClient: !!a.auth?.clientId });
+  const view = (a) => ({ id: a.id, name: a.name, kind: a.kind, ...(a.url ? { url: new URL(a.url).origin } : {}), status: a.kind === 'stdio' || a.auth?.tokens || a.open ? 'connected' : 'sign-in', ...(a.error ? { error: a.error } : {}), ...(a.tools ? { tools: a.tools } : {}), ownClient: !!a.ownClient, hasClient: !!a.auth?.clientId });
 
   function add({ name, url, command, clientId, clientSecret }) {
     const n = String(name ?? '').trim().slice(0, 40);

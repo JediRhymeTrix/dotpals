@@ -138,6 +138,18 @@ html[data-fold="table"] #rc-tray { margin-bottom: 8px; }
 /* The connection, always visible: a thin bar that only shows when something is wrong. */
 #rc-status { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(8px + var(--safe-t)); max-width: calc(100vw - 24px); padding: 6px 12px; border-radius: 999px; background: var(--raise); border: 1px solid var(--line-strong); font-size: 12px; color: var(--muted); box-shadow: 0 4px 18px rgba(0, 0, 0, .45); }
 #rc-status[hidden] { display: none; }
+
+/* "An update is ready": the same pill as the connection one, but at the bottom (above the nav) and only when there IS an update. */
+/* width: max-content, because `left: 50%` otherwise leaves only half the screen to fit in and the words wrap one to a line. */
+#rc-update { position: fixed; z-index: 31; left: 50%; transform: translateX(-50%); bottom: calc(84px + var(--safe-b)); width: max-content; max-width: calc(100vw - 24px); white-space: nowrap; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-radius: 999px; background: var(--raise); border: 1px solid var(--link); font-size: 13px; color: var(--text); box-shadow: 0 6px 22px rgba(0, 0, 0, .55); }
+#rc-update[hidden] { display: none; }
+#rc-update button { min-height: 0; padding: 4px 14px; border-radius: 999px; }
+#rc-update button:not(.rc-later) { background: var(--link); color: #06121f; border-color: transparent; font-weight: 600; }
+#rc-update .rc-later { background: transparent; border-color: transparent; color: var(--muted); }
+html[data-fold="book"] #rc-update { left: calc(var(--rail) + var(--pad)); transform: none; bottom: 20px; max-width: var(--col0); }
+html[data-fold="table"] #rc-update { bottom: calc(var(--seg-bottom) + var(--hinge) + 12px); }
+@media (min-width: 721px) { #rc-update { bottom: 20px; } }
+@media (prefers-reduced-motion: no-preference) { #rc-update { animation: rc-in-up .18s ease-out; } @keyframes rc-in-up { from { opacity: 0; transform: translate(-50%, 6px); } } }
 #rc-status.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line-strong)); }
 #rc-status button { margin-left: 8px; padding: 2px 10px; min-height: 0; }
 
@@ -159,7 +171,6 @@ html[data-fold="table"] #rc-tray { margin-bottom: 8px; }
   .list { max-height: none; }
   .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
-@media (min-width: 640px) and (max-width: 720px) { .app { grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: none; } aside { order: 0; } }
 
 /* BOOK: a left rail, then two columns, one per screen, the hinge between them. */
 /* Widths add up exactly: rail + pad + col1 + (hinge + 2 gutters) + col2 + pad = the viewport. With real

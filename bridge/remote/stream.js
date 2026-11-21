@@ -10,8 +10,10 @@
   window.__dotpalsStream = true;
   const GRACE = 15_000;
   const state = { value: 'connecting', since: 0, lastId: '' };
+  const latestStates = new Map();
+  const activity = new Map();
   const announce = (value, extra = {}) => { state.value = value; window.dispatchEvent(new CustomEvent('dotpals:stream', { detail: { state: value, ...extra } })); };
-  window.dotpalsStream = { state: () => state.value, lastId: () => state.lastId };
+  window.dotpalsStream = { state: () => state.value, lastId: () => state.lastId, snapshot: () => ({ states: [...latestStates.values()], activity: [...activity.values()] }) };
 
   class Foreground {
     static CONNECTING = 0; static OPEN = 1; static CLOSED = 2;
@@ -47,7 +49,7 @@
     }
     #drop() { if (this.#native) { this.#native.close(); this.#native = null; this.#bound.clear(); } }
     #bind(name) {
-      if (!this.#native || this.#bound.has(name)) return;
+      if (name === 'open' || name === 'error' || !this.#native || this.#bound.has(name)) return;
       this.#bound.add(name);
       this.#native.addEventListener(name, (e) => this.#deliver(name, e));
     }
@@ -56,15 +58,34 @@
       // The agents' states (the unnamed "message" events) are also announced to the page ('dotpals:state'), so
       // the remote client's pals follow them without a second connection. Nothing else is: the saved history
       // replayed on every reconnect would only cost battery. The dashboard's own listeners are unaffected.
-      if (name === 'message') { try { window.dispatchEvent(new CustomEvent('dotpals:state', { detail: JSON.parse(e.data) })); } catch {} }
+      if (name === 'message') { try {
+        const u = JSON.parse(e.data);
+        if (typeof u?.session === 'string' && u.session) {
+          if (u.state === 'sleeping') latestStates.delete(u.session); else latestStates.set(u.session, u);
+        }
+        window.dispatchEvent(new CustomEvent('dotpals:state', { detail: u }));
+      } catch {} }
       // The Story panel reads a session's steps; the dashboard already holds them all, so this only passes the line on.
-      else if (name === 'activity') { try { window.dispatchEvent(new CustomEvent('dotpals:activity', { detail: JSON.parse(e.data) })); } catch {} }
-      else if (name === 'reset') window.dispatchEvent(new CustomEvent('dotpals:reset'));
-      if (name === 'message' && typeof this.onmessage === 'function') this.onmessage(e);
-      for (const fn of [...(this.#listeners.get(name) ?? [])]) { try { fn.call(this, e); } catch (err) { console.error(err); } }
+      else if (name === 'activity') { try {
+        const entry = JSON.parse(e.data);
+        if (entry?.id) {
+          activity.set(entry.id, entry);
+          const mine = [...activity.values()].filter((a) => a.session === entry.session);
+          if (mine.length > 120) for (const a of mine.sort((a, b) => a.at - b.at).slice(0, mine.length - 120)) activity.delete(a.id);
+        }
+        window.dispatchEvent(new CustomEvent('dotpals:activity', { detail: entry }));
+      } catch {} }
+      else if (name === 'reset') {
+        latestStates.clear(); activity.clear();
+        window.dispatchEvent(new CustomEvent('dotpals:reset'));
+      }
+      for (const fn of [this[`on${name}`], ...(this.#listeners.get(name) ?? [])]) {
+        if (typeof fn === 'function') { try { fn.call(this, e); } catch (err) { console.error(err); } }
+      }
     }
     #connect() {
-      if (this.#closed || this.#native) return;
+      if (this.#closed || this.#native || document.visibilityState !== 'visible') return;
+      clearTimeout(this.#retry); this.#retry = null;
       announce('connecting');
       const url = state.lastId ? `${this.#url}${this.#url.includes('?') ? '&' : '?'}since=${encodeURIComponent(state.lastId)}` : this.#url;
       this.readyState = 0;
@@ -74,8 +95,7 @@
         this.readyState = 1;
         this.#fails = 0;
         announce('live');
-        if (typeof this.onopen === 'function') this.onopen(e);
-        for (const fn of [...(this.#listeners.get('open') ?? [])]) fn.call(this, e);
+        this.#deliver('open', e);
       };
       es.onerror = (e) => {
         this.readyState = es.readyState === 2 ? 2 : 0;
@@ -85,16 +105,21 @@
           announce(++this.#fails > 3 ? 'closed' : 'offline', { status: 'refused' });
           if (!this.#closed && document.visibilityState === 'visible') this.#retry = setTimeout(() => this.#connect(), Math.min(30_000, 1000 * 2 ** this.#fails));
         } else announce('offline');
-        if (typeof this.onerror === 'function') this.onerror(e);
+        this.#deliver('error', e);
       };
       this.#bound.clear();
       for (const name of this.#listeners.keys()) this.#bind(name);
       this.#bind('message');
+      this.#bind('activity');
+      this.#bind('reset');
     }
     #visibility = () => {
       if (this.#closed) return;
       if (document.visibilityState === 'visible') { clearTimeout(this.#timer); this.#timer = null; this.#connect(); }
-      else if (!this.#timer) this.#timer = setTimeout(() => { this.#timer = null; this.#drop(); this.readyState = 0; announce('paused'); }, GRACE);
+      else {
+        clearTimeout(this.#retry); this.#retry = null;
+        if (!this.#timer) this.#timer = setTimeout(() => { this.#timer = null; this.#drop(); this.readyState = 0; announce('paused'); }, GRACE);
+      }
     };
     #wake = () => { if (!this.#closed && document.visibilityState === 'visible' && !this.#native) { clearTimeout(this.#retry); this.#connect(); } };
   }

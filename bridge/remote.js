@@ -41,7 +41,7 @@ export function cleanSubscription(sub) {
 // PERMISSION PROMPT (allowing "run npm install" is running it). Those need the device's `control`
 // switch, which you turn on yourself, on this computer, so a lost phone can only look.
 // `/api/remote/me…` is a device managing itself (its own push, name, sign-out); the rest of /api/remote is this computer's.
-const NEVER = [/^\/hook$/, /^\/event$/, /^\/api\/remote(?:\/(?!me(?:\/|$)).*)?$/, /^\/api\/app\/quit$/, /^\/api\/apps\/callback$/];
+const NEVER = [/^\/hook$/, /^\/event$/, /^\/api\/recap$/, /^\/api\/remote(?:\/(?!me(?:\/|$)).*)?$/, /^\/api\/app\/quit$/, /^\/api\/apps\/callback$/];
 const ALLOWED_POSTS = [/^\/api\/config$/, /^\/api\/sessions\/[^/]{1,200}\/dismiss$/, /^\/api\/remote\/me(?:\/[a-z]+)?$/];
 
 /** 'ok', 'control' (needs the device's control switch) or 'blocked'. */

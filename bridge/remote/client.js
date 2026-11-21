@@ -1,3 +1,4 @@
+import './update-ui.js'; // registers the worker, checks for an update, and offers it
 import './swipe.js'; // swipe left or right between tabs
 import './pals.js'; // an animated pal per live agent, and the agent picker in Sessions
 import './talk.js'; // the notch-style Talk and Story panel
@@ -65,7 +66,6 @@ import './talk.js'; // the notch-style Talk and Story panel
   window.dotpalsPush = {
     supported: () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
     permission: () => ('Notification' in window ? Notification.permission : 'unsupported'),
-    async subscribed() { try { return !!(await (await navigator.serviceWorker.ready).pushManager.getSubscription()); } catch { return false; } },
     /** Ask permission (must be called from a tap), subscribe, and give the subscription to the computer. */
     async enable() {
       if (!this.supported()) throw new Error('This browser can’t receive notifications here. On iPhone or iPad, add dotpals to the Home Screen first.');
@@ -89,7 +89,7 @@ import './talk.js'; // the notch-style Talk and Story panel
   };
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+    // The worker is registered, checked and updated by update-ui.js (updater.js): an update waits for the person to choose it.
     navigator.serviceWorker.addEventListener('message', async (e) => {
       // The push service rotated the subscription: register the new one, quietly.
       if (e.data?.type === 'resubscribe' && Notification.permission === 'granted') { try { await window.dotpalsPush.enable(); } catch {} }

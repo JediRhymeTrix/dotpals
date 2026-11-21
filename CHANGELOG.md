@@ -7,16 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Explicit PWA update checks on startup, resume (throttled) and request. A complete, build-specific shell waits for Update; the requesting page reloads once. Failed registration/check/activation can be retried. Legacy workers may take over once without forcing a page reload.
+- Push receipts, ten-entry per-device in-memory history and phone-local worker/last-push metadata. Receipts correlate to the original send even when late, concurrent or out of order.
+
+### Fixed
+
+- Notification diagnostics distinguish provider acceptance, worker receipt and browser display-request success without claiming a visible OS popup, battery-saving cause or delivery latency. Physical-phone delivery remains intermittent; cause unestablished.
+- Tests request high urgency, unique tags/Topics, renotify and interaction hints; these do not guarantee immediate delivery. The worker now honors disabling “Only when I’m away”.
+- Remote mutation routes reject GET/HEAD; hook-only recap stays local. Push subscriptions accept only browser-provider hosts and never follow redirects. Notification clicks stay same-origin. Final notification text is bounded and pattern-redacted, including context labels.
+- Connector page/API/event views omit private launch commands and URL credentials, paths and query strings. Controlling browser-origin Talk requests pass the remote admission boundary without weakening the local listener's Origin check.
+- A remote stream without permission-answer UI no longer delays Claude's terminal prompt. Remote desktop actions/connectors remain unavailable rather than claiming they executed.
+- Late-loaded pals and Story hydrate from the stream snapshot; stream resets clear stale sessions, open/error listeners fire once, and hidden retry timers cannot reopen background connections. Talk remains reachable with no active agents. Flat 640–720 px screens retain bottom navigation instead of squeezing it into a rail.
+
 ## [0.14.1] - 2026-11-21
 
 ### Fixed
 
 - Remote client on a book-style fold: the agent picker and the search stay on the first screen above the list they filter (they were placed over the detail); the pals fit three to a row and their names wrap instead of being cut ("Claude · web" and "Claude · shop" stay tellable apart). The Report card's row labels wrap on a phone or either half of a fold, so more of it is the agents. On a tabletop the pals are one scrolling row.
 - Tests that failed on Windows (and, once, on a CI runner) when the whole suite ran at once: fixed 300–400 ms waits for git's background snapshot (now 1.5–2 s), a temp folder still busy when removed (now retried), and ports picked from a range other tests share or as "the one after" another (now asked of the system).
-
-### Changed
-
-- The hook script `~/.dotpals/integrations/agent-events.mjs` is not part of this repository; the fix that lets it read a list of commands (Cline’s `run_commands`) lives on this computer only.
 
 ## [0.14.0] - 2026-11-21
 

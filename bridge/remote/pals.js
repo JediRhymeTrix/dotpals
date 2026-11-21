@@ -22,7 +22,6 @@ const pal = (agent, size) => {
 // -- the tray ---------------------------------------------------------------------------------------
 const tray = make('section');
 tray.id = 'rc-tray';
-tray.hidden = true;
 tray.setAttribute('aria-label', 'Your agents');
 const head = make('div', 'rc-tray-head');
 const sum = make('span', 'rc-sum');
@@ -39,7 +38,9 @@ const nodes = new Map(); // session id → { button, pal, name, line }
 function paint(now = Date.now()) {
   const list = ordered(sessions, now);
   const shown = list.slice(0, MAX);
-  tray.hidden = !list.length;
+  // Talk is useful even when no coding agents are running.
+  tray.hidden = false;
+  row.hidden = !list.length;
   sum.textContent = summary(list);
   for (const [id, n] of nodes) if (!shown.some((s) => s.id === id)) { n.button.remove(); nodes.delete(id); }
   for (const s of shown) {
@@ -104,6 +105,8 @@ function chips() {
 let timer = 0;
 const later = () => { if (!timer) timer = setTimeout(() => { timer = 0; if (document.visibilityState === 'visible') paint(); }, 120); };
 addEventListener('dotpals:state', (e) => { apply(sessions, e.detail); later(); });
+addEventListener('dotpals:reset', () => { sessions.clear(); paint(); });
+for (const update of window.dotpalsStream?.snapshot().states ?? []) apply(sessions, update);
 addEventListener('hashchange', later);
 document.addEventListener('visibilitychange', later);
 setInterval(later, 20_000); // dozing off, and the recently quiet leaving, need no event

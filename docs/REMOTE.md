@@ -1,6 +1,6 @@
 # Remote client
 
-Use dotpals from your phone, tablet or foldable: the same dashboard (every page, every setting), live, installable as an app, with notifications you choose. **Off until you turn it on.**
+Use the dotpals dashboard from your phone, tablet or foldable: live, installable as an app, with notifications you choose. **Off until you turn it on.** Desktop-only actions and remote administration stay on the computer.
 
 Settings → Remote on the computer. Nothing here runs, listens or sends anything until then.
 
@@ -12,8 +12,8 @@ Settings → Remote on the computer. Nothing here runs, listens or sends anythin
      `cloudflared tunnel --url http://127.0.0.1:5176` (or Tailscale: `tailscale serve --bg --https=443 http://127.0.0.1:5176`). Paste the https address it prints into *Address your devices open*.
    - **https on your own network, no tunnel.** Run `dotpals remote cert` (or Settings → Remote → *https on my network*). It makes a small private certificate authority and a certificate for this computer's LAN addresses **and its `.local` name**, points the remote client at it and prints the steps for your phone. Do the phone step once: copy `~/.dotpals/remote-cert/ca.pem` to it and install it as a CA certificate (Android: Settings → Security → Encryption & credentials → Install a certificate; iPhone/iPad: open the file, install the profile, then turn it on under Settings → General → About → Certificate Trust Settings). Compare the fingerprint it shows. After that, `https://<this computer's address>:5176/pair` works, and the QR code opens it.
      - **It looks after itself.** When the computer's address changes (a new router lease, Wi-Fi to Ethernet), dotpals issues a new certificate within a minute and swaps it in without dropping anything. The CA stays the same, so phones need nothing. A moment with no network keeps the current certificate. If a renewal fails, Settings → Remote says so and the old certificate keeps serving.
-     - **Address or name?** The certificate covers both, and the QR code carries the address (it works on every phone, the instant you scan it). The name (`nighthawk.local`) survives an address change, which is why it's also accepted and shown under the QR code, but it only works where the device can look up `.local` names (multicast DNS). Apple devices do that; on Android it depends on the version and browser, and routers with "client isolation" block it. That's untested here beyond this Windows computer answering mDNS correctly, so try it on your phone before relying on it. Your router doesn't know the name (this setup checked), so nothing depends on it. For a name that always works, give the computer a fixed address in your router (a DHCP reservation) and use that.
-     - The CA is restricted by X.509 name constraints to private addresses and `.local` names. Even if its key leaked, it couldn't vouch for a real website, and installing it on your phone doesn't make one look trusted.
+     - **Address or name?** The certificate covers both. The QR code uses the address to avoid depending on multicast DNS; your phone still needs network access to the computer. The computer's `.local` name survives an address change where mDNS resolution works. Support varies by browser, OS and network isolation; test it before relying on it. A DHCP reservation is another option.
+     - The CA carries X.509 name constraints for private addresses and `.local`/localhost names. Keep its key private regardless: trust-store enforcement varies, and a leaked key can impersonate local services within those constraints. Transfer only `ca.pem`, never `ca-key.pem`.
      - Needs `openssl`; Git for Windows includes one. Windows' firewall may need to allow the app in on your network (private networks are usually already open).
    - **Your own certificate.** Set `remote.tlsCert` and `remote.tlsKey` (file paths) in `~/.dotpals/config.json`, choose "Anything on my network", and use `https://<this computer>:5176`.
 3. **Pair.** *Pair a device* shows a QR code and a code like `7K2M-9QXD-4TBH`. Scan it with the phone's camera, or open `<your address>/pair` and type it. The code works once and expires in 5 minutes.
@@ -24,9 +24,11 @@ Settings → Remote on the computer. Nothing here runs, listens or sends anythin
 
 Out of the box a device can **look** (everything the dashboard shows) and change how things **look and sound** (pal, sounds, notification settings, story view). It can not run anything on your computer.
 
-Turn on **Let this device control** (on the computer, per device) and it can also answer agents' permission prompts, hand off sessions, rewind a request, start Blu's tasks and change any setting except the remote settings themselves. Allowing an agent's `npm install` *is* running it, so this is separate and off by default: a lost phone can only look.
+Turn on **Let this device control** (on the computer, per device) and it can hand off sessions, rewind a request, start Blu's coding tasks and change settings except remote administration. This grants powerful access to your computer, so it is separate and off by default. A look-only lost phone can still expose private session data: revoke it promptly.
 
-Never from a device, whatever its switch: agents' hooks and events, quitting the app, pairing others, the remote settings.
+The API permission boundary also requires control for answering permission requests, but the remote UI does not yet render Allow/Deny cards. A remote stream alone never intercepts Claude's terminal prompt. Answer on the desktop. Blu's remote panel supports answers and coding plans; desktop actions (volume, clicking, typing) and connector execution are not implemented there.
+
+Never from a device, whatever its switch: agents' hooks, events and hook recap consumption, quitting the app, pairing others, or remote administration.
 
 ## Windows, macOS and Linux
 
@@ -65,14 +67,44 @@ The page slides in from the side you swiped (not if you've asked your device to 
 
 Chosen per device, on the device: a request finishes (only ones that took a while), an agent is waiting for you (still waiting after 20 s), an agent asks permission (needs *control*), an agent seems stuck, two agents on one file, an agent gave up on failing tests, a context window nearly full (off by default). *Only when I'm away* skips them while the app is open on that device.
 
-They're [Web Push](https://www.rfc-editor.org/rfc/rfc8030): the computer encrypts each one for that device ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) and signs it ([VAPID, RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)), and your browser's push service (Google, Mozilla, Apple) carries it. It sees an encrypted blob, a timestamp and your computer's address, never the text. The text is shortened and has secrets removed before it's encrypted. At most one per thing per 10 s and 20 a minute per device.
+They're [Web Push](https://www.rfc-editor.org/rfc/rfc8030): the computer encrypts each one for that device ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) and signs it ([VAPID, RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)). Only Google, Mozilla, Apple and Microsoft push-provider hosts are accepted; custom providers are not supported. Providers see ciphertext and network/timing metadata, not notification plaintext. Text is shortened and pattern-redacted before encryption; this is best effort, not a guarantee that arbitrary sensitive prose is removed. Lock-screen previews can expose it. Ordinary notifications are limited to one per tag per 10 s and 20 per minute per device; explicit tests bypass those preferences and limits.
+
+### Updating the app on your phone
+
+The installed app checks for a newer worker itself and does not automatically reload your current page:
+
+- It asks your computer for a newer version when it opens, when you come back to it (at most every 10 minutes), and when you press **Settings → Remote → Check for updates**.
+- A complete app shell downloads and **waits**. A small pill appears, **"An update is ready · Update · Later"**. Update activates it and reloads the requesting page once. Later hides the pill for that visit; Settings still offers Update. Another open tab may activate the worker, but this page is not automatically reloaded.
+- Each worker uses its own immutable cached shell, including transitive module imports. A failed shell download leaves the existing worker in place. API/event data always uses the network. Developers must bump the worker build when shell files change without a release-version change.
+- A failed check or activation is reported and can be retried. If registration failed, the Check button retries it too.
+
+Migration exception: a worker predating the Update UI may be replaced automatically once, because its page cannot request activation. This does not force a page reload. Browsers can also activate a waiting worker naturally after all controlled pages close.
+
+### When "Send a test" says it was sent and nothing shows
+
+"Accepted by the push service" means only that the provider accepted the message. The worker separately records receipt and reports the result of `showNotification()`. A successful call is **not proof of a visible OS popup**.
+
+| Settings says | What it means | What to do |
+|---|---|---|
+| "…browser accepted the notification display request" | The worker received it and `showNotification()` resolved. OS visibility, sound and attention are not confirmed. | Check the notification tray, browser/OS settings and Do Not Disturb. |
+| "…received it but held it back because the app was open" | A real notification is held while the app is in front (it shows live). A test is never held. | Nothing: this is by design. |
+| "…received it but couldn't show it (…)" | The phone has the message and the browser refused to show it. | Android Settings → Apps → the browser (or dotpals) → Notifications: allow it, and check the *dotpals* channel isn't off. |
+| "…no receipt has reached the computer" | Delivery or the return connection may be delayed or unavailable; an old worker may not send receipts. | Inspect the phone-local record and worker build; check both phone internet and access back to this computer. |
+| "No push is recorded on this phone" | Inconclusive: storage may be unavailable/cleared, a different worker may have handled it, or it may not have arrived. | Check the active worker/build and connectivity. Battery restrictions are one possible factor, not a diagnosis. |
+| An older worker/version | The worker differs, or its version could not be read. | Use Check for updates, then Update if offered. Reload after fixing registration/connectivity failures. |
+
+A test requests *high* urgency, a distinct tag/Topic, `renotify` and `requireInteraction`. These are hints, not guarantees of immediate delivery or presentation. Ordinary completion notifications use normal urgency. Browser, push-provider, OS, network and power policy can all affect timing.
+
+Recent pushes lists up to ten per-device server records held in memory (five shown in Settings); restart clears them. Late receipts attach to their original send. The receipt's `at` is **when the computer heard back**, not phone arrival time. Phone-local arrival timestamps use a separate clock; subtracting the two clocks does not establish delivery latency. Preserve a test's history rather than repeatedly sending new tests.
+
+Physical-phone delivery remains intermittent in current testing; its cause has not been established. Desktop real-browser tests exercise subscription, encrypted push, worker receipt, notification registration and update flow, not an Android/iOS popup guarantee.
 
 ## Real time, cheaply
 
 - The live stream is open **only while the app is in front of you.** Hidden for 15 seconds, it closes: no connection, no radio, no work on the computer. Coming back it asks for just what it missed (`?since=`), not the whole history.
 - Changes to the same thing are sent once (a tool call that updates ten times in a moment is one message), in one write, gzip-compressed.
-- Scripts and styles are cached by the service worker and revalidated with ETags, so opening the app is instant and mostly sends nothing.
-- A device that can't keep up is dropped and resumes, not buffered. With no device connected, no timers run.
+- Scripts and styles are cached by build. Update checks fetch the worker explicitly; uncached static requests can revalidate with ETags.
+- A device that can't keep up is dropped and resumes, not buffered without limit. An idle live-stream hub has no timer; enabled TLS certificate maintenance still checks for address changes.
 - A new device loads the last 3 days (`remote.historyDays`, 1 to 7).
 
 ## Foldables
@@ -93,12 +125,13 @@ Not yet tried on a physical foldable: the layouts are checked in Edge with the p
 
 ## Security
 
-- The remote listener is a **second** server. The bridge's own `127.0.0.1:5175` (agents' hooks, approvals, quitting) is unchanged and never reachable from a network.
-- A pairing code is 60 random bits, hashed in memory, single use, 5 minutes, and rides in the URL `#fragment` (never sent to a server or logged; the page removes it from the address bar). Too many wrong tries cancels pending codes.
+- The remote listener is a **second** server. The bridge's own `127.0.0.1:5175` is not rebound or exposed. Only permitted API routes are forwarded internally; hooks, hook recap, quit, OAuth callback and remote administration stay local.
+- A pairing code is 60 random bits, hashed in memory, single use, five minutes, and rides in the URL `#fragment` (not sent in the page request; the claim sends it in a POST body). The page removes it from the address bar. Too many wrong tries cancels pending codes.
 - Pairing only completes over https (or from this computer). The device cookie is `HttpOnly; Secure; SameSite=Strict`, 256 random bits; only its SHA-256 is stored, in `~/.dotpals/remote.json` (0600).
 - Every request is checked: host name, origin, a custom header on changes, the device, then what that device may do. Pages carry a Content Security Policy that allows only this origin's scripts.
 - Sign a device out from the computer or the device; it's cut off at once, mid-stream.
 - Don't expose port 5176 to the internet without https. A tunnel is fine; port-forwarding plain http is not.
+- Paired devices can read sensitive session data. The page stores a recent snapshot locally; revocation cannot erase already-downloaded copies from an offline device. See [SECURITY.md](../SECURITY.md) for trust boundaries, private-CA cautions and push-provider metadata.
 
 ## Files
 

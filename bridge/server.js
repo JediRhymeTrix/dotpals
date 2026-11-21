@@ -859,9 +859,10 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
     }, delay));
   }
   /** Read a JSON body; only this bridge's own pages (or no page at all) may ask, as for the hand-off. */
+  const remoteRequests = new WeakSet(); // only the authenticated, Origin-checked remote listener can add a request
   async function talkBody(req, res) {
     const origin = req.headers.origin;
-    if (origin && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) { json(res, 403, { error: 'forbidden' }); return null; }
+    if (origin && !remoteRequests.has(req) && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) { json(res, 403, { error: 'forbidden' }); return null; }
     try { return JSON.parse((await readBody(req)) || '{}'); } catch { json(res, 400, { error: 'bad json' }); return null; }
   }
   /** A project folder the agents worked in, by its path; never a folder only a request names. */
@@ -1257,9 +1258,9 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   const approvalView = ({ resolve, timer, ...item }) => item;
   async function askApproval(event, req) {
     // Only when something that can answer is open (the pal or the notch, which connect with
-    // ?answers=1, or a paired device allowed to control): an open dashboard alone would leave
+    // ?answers=1): an open dashboard or paired device alone would leave
     // Claude waiting with nothing to click.
-    if (!config.approvals || !(answerers.size || remoteServer.canAnswer()) || typeof event.tool_name !== 'string') return null;
+    if (!config.approvals || !answerers.size || typeof event.tool_name !== 'string') return null;
     const id = randomUUID();
     const session = String(event.session_id);
     const d = describeTool(event.tool_name, event.tool_input ?? {}, event.cwd);
@@ -1610,6 +1611,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   async function api(req, res, path) {
     // Pairing and the paired devices: only from this computer (the remote client can't reach these).
     if (path === '/api/remote' || path.startsWith('/api/remote/')) {
+      if (req.method !== 'POST' && !(req.method === 'GET' && path === '/api/remote')) return json(res, 405, { error: 'method not allowed' });
       if (req.method !== 'GET' && (req.method !== 'POST' || req.headers['x-dotpals'] !== '1')) return json(res, 403, { error: 'forbidden' });
       return remoteServer.controlApi(req, res, path, { json, readBody });
     }
@@ -1952,7 +1954,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
     file: () => join(home(), 'remote.json'),
     certHome: home(),
     root, version, log: print,
-    api: (req, res, path) => api(req, res, path),
+    api: (req, res, path) => { remoteRequests.add(req); return api(req, res, path); },
     snapshot: remoteSnapshot,
     // The request that just ended in this session, for "Claude is done" pushes.
     turn: (session) => {

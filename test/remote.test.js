@@ -89,6 +89,7 @@ test('permissions: reading is open, risky actions need the control switch, some 
     assert.equal(permission(trusted, 'POST', p), 'ok', p);
   }
   for (const d of [plain, trusted]) {
+    for (const method of ['GET', 'HEAD', 'POST']) assert.equal(permission(d, method, '/api/recap'), 'blocked', 'hook recap must not consume shared state remotely');
     for (const [m, p] of [['POST', '/hook'], ['POST', '/event'], ['POST', '/api/app/quit'], ['POST', '/api/remote/pair'], ['GET', '/api/remote/devices'], ['GET', '/api/apps/callback'], ['GET', '/bridge/server.js'], ['PUT', '/api/config'], ['DELETE', '/api/config']]) assert.equal(permission(d, m, p), 'blocked', `${m} ${p}`);
   }
 });

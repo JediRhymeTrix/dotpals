@@ -132,4 +132,3 @@ test('wired in: client.js loads the pals and Talk, the service worker caches the
   assert.match(css, /html\[data-fold="book"\] \.rc th\[scope="row"\][^{]*\{[^}]*white-space: normal/);
   assert.match(css, /@media \(max-width: 720px\) \{ \.rc th\[scope="row"\]/);
 });
-
