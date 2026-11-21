@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Remote client on a book-style fold: the agent picker and the search stay on the first screen above the list they filter (they were placed over the detail); the pals fit three to a row and their names wrap instead of being cut ("Claude · web" and "Claude · shop" stay tellable apart). The Report card's row labels wrap on a phone or either half of a fold, so more of it is the agents. On a tabletop the pals are one scrolling row.
+- Two tests that failed on Windows when the whole suite ran at once: a fixed 300–400 ms wait for git's background snapshot (now 1.5–2 s), and a temp folder still busy when removed (now retried).
+
 ## [0.14.0] - 2026-11-21
 
 ### Added

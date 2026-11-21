@@ -125,5 +125,11 @@ test('wired in: client.js loads the pals and Talk, the service worker caches the
   const css = read('remote.css');
   for (const sel of ['#rc-tray', '.rc-pal', '#rc-chips', '.rc-chip', '#rc-talk', 'html[data-fold="book"] #rc-talk', 'html[data-fold="table"] #rc-talk']) assert.ok(css.includes(sel), sel);
   assert.ok(read('stream.js').includes('dotpals:state'));
+  // The unfolded layouts: in a book the picker and the search stay on the first screen (above the list they filter), and the
+  // Report card's row labels wrap so the agents get the room; on a tabletop the tray is one row, not a quarter of the half you read.
+  assert.ok(css.includes('html[data-fold="book"] #rc-chips, html[data-fold="book"] .view > .toolbar { grid-column: 1;'));
+  assert.ok(css.includes('html[data-fold="table"] .rc-pals { flex-wrap: nowrap;'));
+  assert.match(css, /html\[data-fold="book"\] \.rc th\[scope="row"\][^{]*\{[^}]*white-space: normal/);
+  assert.match(css, /@media \(max-width: 720px\) \{ \.rc th\[scope="row"\]/);
 });
 

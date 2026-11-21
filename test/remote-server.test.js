@@ -1,6 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { get, request } from 'node:http';
+import { createServer as createNet } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,13 +18,14 @@ const { startBridge } = await import('../bridge/server.js');
 const { hostAllowed, pairingUrl, qrRows } = await import('../bridge/remote-server.js');
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const BLOCKED = new Set([5985, 5986, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697]);
-const port = () => { let p; do p = 7100 + Math.floor(Math.random() * 1500); while (BLOCKED.has(p)); return p; };
+// Ports the system says are free right now. A random pick from a range other test files also use sometimes landed on
+// one of theirs, and a clash on the REMOTE port isn't an error (the bridge just logs it), so the test failed instead of retrying.
+const port = () => new Promise((ok) => { const s = createNet().listen(0, '127.0.0.1', () => { const { port: p } = s.address(); s.close(() => ok(p)); }); });
 
 async function boot() {
   for (let i = 0; i < 10; i++) {
-    const main = port();
-    const remotePort = port();
+    const main = await port();
+    const remotePort = await port();
     if (main === remotePort) continue;
     saveConfig({ remote: { enabled: true, bind: 'local', port: remotePort } });
     try {

@@ -64,7 +64,9 @@ main { touch-action: pan-y pinch-zoom; }
 .rc-pals::-webkit-scrollbar { display: none; }
 .rc-pal { flex: 0 0 auto; width: 148px; scroll-snap-align: start; display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 6px 10px 6px 6px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
 .rc-pal dot-pal { grid-row: 1 / 3; }
-.rc-pal .n, .rc-chip .n { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.rc-chip .n { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+/* A pal's name may take two lines: "Claude · web" and "Claude · shop" must stay tellable apart in a narrow column. */
+.rc-pal .n { font-size: 12px; font-weight: 600; line-height: 1.25; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
 .rc-pal small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rc-pal[data-state="waiting"] { border-color: var(--warn); }
 .rc-pal[data-state="error"] { border-color: var(--bad); }
@@ -114,9 +116,18 @@ html[data-talk="open"] main { overflow: hidden; }
 /* BOOK: the pals in the first column, the story and Talk in the second, off the hinge. */
 html[data-fold="book"] #rc-tray { width: var(--col0); max-width: var(--col0); margin-left: 0; margin-right: 0; } /* on the first screen: nothing crosses the hinge */
 html[data-fold="book"] #rc-talk { left: calc(var(--rail) + var(--pad) + var(--col0) + var(--hinge) + 2 * var(--gutter) + var(--col1) / 2); width: calc(var(--col1) - 8px); transform: translateX(-50%); }
-html[data-fold="book"] .rc-pal { width: 160px; }
-/* The picker is one row on the first screen (a grid item would otherwise be placed in the second). */
-html[data-fold="book"] #rc-chips { grid-column: 1; min-width: 0; }
+html[data-fold="book"] .rc-pal { width: 138px; } /* three pals fit the first screen's column (448 px on a Fold) without wrapping */
+/* The picker and the search are one column on the first screen, above the list they filter (a grid item would otherwise be placed in the second, over the detail). */
+html[data-fold="book"] #rc-chips, html[data-fold="book"] .view > .toolbar { grid-column: 1; min-width: 0; }
+html[data-fold="book"] .view > .toolbar input[type="search"] { min-width: 0; }
+/* TABLE: one row of pals, scrolling sideways: a wrapped tray would take a quarter of the half you read in. */
+html[data-fold="table"] .rc-pals { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+
+/* The Report card: its row labels may wrap on a narrow screen, so more of it is the agents (a phone, either half of a fold). */
+@media (max-width: 720px) { .rc th[scope="row"], .rc thead th.corner { min-width: 138px; max-width: 150px; white-space: normal; } .rc thead th.ag { min-width: 104px; } }
+html[data-fold="book"] .rc th[scope="row"], html[data-fold="book"] .rc thead th.corner,
+html[data-fold="table"] .rc th[scope="row"], html[data-fold="table"] .rc thead th.corner { min-width: 138px; max-width: 170px; white-space: normal; }
+html[data-fold="book"] .rc thead th.ag, html[data-fold="table"] .rc thead th.ag { min-width: 104px; }
 /* TABLE: Talk drops onto the upper half and the pals sit just above the hinge: nothing is under your thumbs' reach but the nav. */
 html[data-fold="table"] #rc-talk { max-height: calc(var(--seg-top) - 16px - var(--safe-t)); }
 html[data-fold="table"] #rc-tray { margin-bottom: 8px; }
