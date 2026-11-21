@@ -40,6 +40,18 @@ html[data-wco] aside a, html[data-wco] aside button { app-region: no-drag; -webk
 }
 @media (max-width: 560px) { nav svg { display: block; } nav a { font-size: 10.5px; } }
 
+/* A horizontal swipe on the page belongs to the tab swipe, not to the browser's own "swipe back" (which would leave the app for the pairing page).
+   touch-action stops at the nearest scroll container, so a table or chart that scrolls sideways still does. */
+main { touch-action: pan-y pinch-zoom; }
+
+/* Swiping to another tab: the new page slides in from the side you swiped towards (not with reduced motion; swipe.js skips it). */
+@media (prefers-reduced-motion: no-preference) {
+  main[data-slide="next"] { animation: rc-slide-next .2s ease-out; }
+  main[data-slide="prev"] { animation: rc-slide-prev .2s ease-out; }
+  @keyframes rc-slide-next { from { opacity: .4; transform: translateX(28px); } }
+  @keyframes rc-slide-prev { from { opacity: .4; transform: translateX(-28px); } }
+}
+
 /* The connection, always visible: a thin bar that only shows when something is wrong. */
 #rc-status { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(8px + var(--safe-t)); max-width: calc(100vw - 24px); padding: 6px 12px; border-radius: 999px; background: var(--raise); border: 1px solid var(--line-strong); font-size: 12px; color: var(--muted); box-shadow: 0 4px 18px rgba(0, 0, 0, .45); }
 #rc-status[hidden] { display: none; }

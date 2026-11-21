@@ -8,7 +8,7 @@ const VERSION = '__VERSION__';
 const SHELL = `dotpals-shell-${VERSION}`;
 const SHELL_FILES = [
   '/', '/manifest.webmanifest', '/bridge/remote/remote.css', '/bridge/remote/boot.js', '/bridge/remote/stream.js', '/bridge/remote/client.js',
-  '/bridge/remote/settings.js', '/bridge/remote/icons/icon-192.png', '/desktop/icon.png',
+  '/bridge/remote/swipe.js', '/bridge/remote/settings.js', '/bridge/remote/icons/icon-192.png', '/desktop/icon.png',
 ];
 
 self.addEventListener('install', (event) => {

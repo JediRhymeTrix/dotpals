@@ -28,6 +28,18 @@ Turn on **Let this device control** (on the computer, per device) and it can als
 
 Never from a device, whatever its switch: agents' hooks and events, quitting the app, pairing others, the remote settings.
 
+## Swiping between tabs
+
+Swipe left for the next tab and right for the previous one, in the order of the navigation (Overview, Report card, Sessions, Map, Agents, Settings). A replay counts as Sessions. It stops at either end rather than wrapping round.
+
+It stays out of the way of what you do by hand, so it ignores:
+
+- a drag that starts in a table, chart or code block that scrolls sideways, in a field or a slider, or in anything marked `data-noswipe`
+- a swipe that starts within 24 px of the screen's edge (Android and iOS use that for "back"), and a mostly vertical drag (that's scrolling)
+- anything slow, short or with more than one finger
+
+The page slides in from the side you swiped (not if you've asked your device to reduce motion). `main` is set to `touch-action: pan-y pinch-zoom`, so Chrome doesn't also treat the swipe as "back".
+
 ## Notifications
 
 Chosen per device, on the device: a request finishes (only ones that took a while), an agent is waiting for you (still waiting after 20 s), an agent asks permission (needs *control*), an agent seems stuck, two agents on one file, an agent gave up on failing tests, a context window nearly full (off by default). *Only when I'm away* skips them while the app is open on that device.
@@ -69,4 +81,4 @@ Not yet tried on a physical foldable: the layouts are checked in Edge with the p
 
 ## Files
 
-`bridge/remote-server.js` (listener, pairing, routing) · `remote.js` (devices, permissions) · `remote-hub.js` (live stream) · `remote-push.js` (what notifies) · `webpush.js` (encryption, VAPID) · `remote-assets.js` (static files) · `bridge/remote/` (the app: `boot.js`, `stream.js`, `client.js`, `settings.js`, `sw.js`, `pair.*`, `remote.css`, manifest, icons) · `bridge/vendor/qrcode.js` (MIT).
+`bridge/remote-server.js` (listener, pairing, routing) · `remote.js` (devices, permissions) · `remote-hub.js` (live stream) · `remote-push.js` (what notifies) · `webpush.js` (encryption, VAPID) · `remote-assets.js` (static files) · `bridge/remote/` (the app: `boot.js`, `stream.js`, `client.js`, `swipe.js`, `settings.js`, `sw.js`, `pair.*`, `remote.css`, manifest, icons) · `bridge/vendor/qrcode.js` (MIT).

@@ -1,3 +1,4 @@
+import './swipe.js'; // swipe left or right between tabs
 // The remote client's glue, loaded only on a paired device (the dashboard itself is untouched):
 //  - registers the service worker (installable, instant start)
 //  - shows the connection when it matters (offline, reconnecting, signed out), never when fine
