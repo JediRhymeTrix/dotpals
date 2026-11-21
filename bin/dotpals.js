@@ -642,7 +642,7 @@ async function remoteCommand(sub, flags) {
        Its fingerprint, to compare on the phone: ${dim(caFingerprint(certDir(home())) ?? '')}
     2. ${bold('Android')}: Settings → Security → More security settings → Encryption & credentials → Install a certificate → CA certificate.
        ${bold('iPhone/iPad')}: open the file, Settings → Profile Downloaded → Install; then Settings → General → About → Certificate Trust Settings → turn it on.
-    3. Turn the remote client on (Settings → Remote) and scan the QR code, or open ${bold(`https://${made.addresses[0]}:${port}/pair`)}${name ? `\n       ${dim(`${name} works too on phones that can look up .local names (iPhone and Mac always can; Android Chrome mostly). Use the address if it doesn't.`)}` : ''}
+    3. Turn the remote client on (Settings → Remote) and scan the QR code, or open ${bold(`https://${made.addresses[0]}:${port}/pair`)}${name ? `\n       ${dim(`${name} also works on devices that can look up .local names (Apple devices do; support on Android and on some routers varies, so check on yours). The address always works.`)}` : ''}
 
   ${dim('The CA can only vouch for private addresses and .local names, so installing it can’t make a real website look trusted.')}
   ${dim('If your computer’s address changes, dotpals issues a new certificate by itself (the CA stays, so phones keep working). Only a changed .local name needs this run again.')}
