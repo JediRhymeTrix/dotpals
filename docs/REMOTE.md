@@ -28,6 +28,20 @@ Turn on **Let this device control** (on the computer, per device) and it can als
 
 Never from a device, whatever its switch: agents' hooks and events, quitting the app, pairing others, the remote settings.
 
+## Windows, macOS and Linux
+
+The remote client is the same on all three (CI builds and tests it on each, on Node 20 and 22). What differs is the computer around it:
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| `openssl` for `dotpals remote cert` | Git for Windows' is found and used; a broken one on PATH (Anaconda, XAMPP) is skipped, because each candidate has to make a real certificate first | The system's LibreSSL works (key identifiers are written out, since LibreSSL doesn't add them), or Homebrew's | `/usr/bin/openssl`, from your package manager if it's missing |
+| Your computer's `.local` name | Resolves on a phone once Windows is on a *private* network | Bonjour: always there | Needs **avahi** (`avahi-daemon`) running for phones to find `name.local`; the address in the QR code works without it |
+| Firewall | Allow the app in on private networks (a prompt appears the first time) | Allow incoming connections when asked | `ufw allow <port>/tcp` (the port is in Settings → Remote) if you use ufw |
+| Files only you can read (`remote.json`, the CA key, `config.json`) | The folder's own permissions, which are per user | mode `0600` | mode `0600` |
+| Where it lives | `%USERPROFILE%\.dotpals` | `~/.dotpals` | `~/.dotpals` |
+
+Installing the CA on the phone is the same everywhere: send `~/.dotpals/remote-cert/ca.pem` to it (AirDrop, a USB cable, a download from your own computer) and trust it. On Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate. On iPhone: open the file, install the profile, then Settings → General → About → Certificate Trust Settings. It can only vouch for private addresses and `.local` names.
+
 ## Agent pals, the agent picker, and Talk
 
 - **Pals.** A tray at the top of every page shows one animated pal per live agent (the same pals as the notch), with the step it's on. Whoever needs you comes first and has a yellow outline; tap a pal to open its session. A quiet one dozes off after three minutes and leaves the tray after ten. They follow the live stream, so nothing is polled and nothing runs while the app is in the background.

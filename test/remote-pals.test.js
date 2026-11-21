@@ -106,6 +106,17 @@ test('a phone keeps only the newest steps of a session', () => {
   assert.equal(m.size, 5);
 });
 
+test('the dashboard tells a look-only phone what to do instead of "Couldn’t ask. Is the bridge running?"', async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../bridge/dashboard.html', import.meta.url), 'utf8');
+  // api() keeps the bridge's own words for a refusal (error: 'control', message: what to do) and the status.
+  assert.match(html, /data\.error === 'control' && data\.message \? data\.message/);
+  assert.match(html, /Object\.assign\(new Error\(message\), \{ status: res\.status \}\)/);
+  // The brain test and settings saves show that message when the bridge answered; "is it running" only when it didn't.
+  assert.match(html, /err\.status \? `✗ \$\{err\.message\}` : 'Couldn’t ask\. Is the bridge running\?'/);
+  assert.match(html, /err\.status \? err\.message : 'Couldn’t save\. Is the bridge running\?'/);
+});
+
 test('wired in: client.js loads the pals and Talk, the service worker caches them, and they have a place to go', async () => {
   const { readFileSync } = await import('node:fs');
   const read = (p) => readFileSync(new URL(`../bridge/remote/${p}`, import.meta.url), 'utf8');

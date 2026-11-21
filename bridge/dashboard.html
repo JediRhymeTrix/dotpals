@@ -969,8 +969,9 @@
       const res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json', 'x-dotpals': '1' }, body: JSON.stringify(body) });
       if (!res.ok) {
         let message = `${res.status}`;
-        try { message = (await res.json()).error ?? message; } catch {}
-        throw new Error(message);
+        // A paired phone without the control switch gets { error: 'control', message: <what to do> }: say that, not "control".
+        try { const data = await res.json(); message = data.error === 'control' && data.message ? data.message : data.error ?? message; } catch {}
+        throw Object.assign(new Error(message), { status: res.status });
       }
       return res.json();
     }
@@ -2455,7 +2456,7 @@
         $('saved').textContent = 'Saved';
         clearTimeout(save.t); save.t = setTimeout(() => ($('saved').textContent = ''), 1500);
         renderSettings();
-      } catch { toast('Couldn’t save. Is the bridge running?'); }
+      } catch (err) { toast(err.status ? err.message : 'Couldn’t save. Is the bridge running?'); }
     }
     $('s-character').onchange = (e) => { save({ character: e.target.value }); preview.character = e.target.value; preview.play('jump'); };
 
@@ -2823,7 +2824,7 @@
       try {
         const r = await api('/api/brain/test', { id });
         $('b-test-note').textContent = r.ok ? `✓ ${r.by} answered in ${(r.ms / 1000).toFixed(1)} s` : `✗ ${r.error}`;
-      } catch { $('b-test-note').textContent = 'Couldn’t ask. Is the bridge running?'; }
+      } catch (err) { $('b-test-note').textContent = err.status ? `✗ ${err.message}` : 'Couldn’t ask. Is the bridge running?'; }
     };
     loadBrain();
     $('c-test').onclick = async () => {

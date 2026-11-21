@@ -7,21 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Remote client: **animated pals**, one per live agent, in a tray on every page (waiting-for-you first; tap to open the session), a **graphical agent picker** in Sessions, and a notch-style **Talk and Story** panel (the plain story of an agent, and Blu to ask; coding work is a plan you Start). Talk needs the device's control switch and an AI set up for Blu, and says which is missing. Laid out per fold: first screen for the pals, second for Talk, nothing on the hinge.
-- Remote client: swipe left or right to move between tabs. It leaves sideways-scrolling tables, fields, sliders and the screen's edge alone, and stops at the first and last tab.
-- `dotpals remote cert`: https for the remote client on your own network, with no tunnel. A private certificate authority (name-restricted to private addresses and `.local`, so it can't vouch for a real website) and a certificate for this computer's addresses; reissued when the address changes, with the CA kept so phones keep working. The pairing link is https when the server has its own certificate.
-
 ## [0.14.0] - 2026-11-21
 
 ### Added
 
+- Linux downloads: an `.AppImage` and a `.deb` with each release, built, started and checked on Linux like the Windows and Mac ones. The in-app updater reads its releases from the repository named in `package.json` (a fork updates from its own; `DOTPALS_UPDATE_REPO` overrides it).
+- Remote client: **animated pals**, one per live agent, in a tray on every page (waiting-for-you first; tap to open the session), a **graphical agent picker** in Sessions, and a notch-style **Talk and Story** panel (the plain story of an agent, and Blu to ask; coding work is a plan you Start). Talk needs the device's control switch and an AI set up for Blu, and says which is missing. Laid out per fold: first screen for the pals, second for Talk, nothing on the hinge.
+- Remote client: swipe left or right to move between tabs. It leaves sideways-scrolling tables, fields, sliders and the screen's edge alone, and stops at the first and last tab.
+- Remote client: **Windows, macOS and Linux** notes in docs/REMOTE.md (openssl, the `.local` name and avahi, firewalls, installing the CA on Android and iPhone).
+- `dotpals remote cert`: https for the remote client on your own network, with no tunnel. A private certificate authority (name-restricted to private addresses and `.local`, so it can't vouch for a real website) and a certificate for this computer's addresses; reissued when the address changes, with the CA kept so phones keep working. The pairing link is https when the server has its own certificate.
 - **Remote client.** Use the whole dashboard, settings included, from a phone, tablet or foldable: scan a QR code or type a code to pair, then install it as an app. Off until Settings → Remote turns it on. A second listener (port 5176) keeps the bridge's own `127.0.0.1` one, and agents' hooks, unreachable from a network. A device can look and change how things look; **Let this device control** (per device, set on the computer) adds approvals, hand-offs, rewinds and every setting. See `docs/REMOTE.md`.
 - **Web Push notifications**, chosen per device: a request finished, an agent waiting for you, a permission prompt, stuck, two agents on one file, tests given up on, context nearly full. Encrypted for the device (RFC 8291) and signed (VAPID, RFC 8292) with no dependency, text shortened and secret-redacted, quiet while the app is open.
 - **Real time that costs little.** The live stream is open only while the app is in front of you; coming back it asks for just what it missed. Changes are coalesced, gzip-compressed and cached with ETags; nothing runs with no device connected.
 - **Foldables.** The layout follows the Device Posture and Viewport Segments APIs: one pane per screen across a hinge, content above and controls below when half-open, a side-by-side list and detail on tablets, bottom navigation and 44 px targets on phones, Window Controls Overlay when installed on a desktop.
 - A hand-written PWA: manifest with shortcuts, maskable icons, a service worker, and a pairing page.
+
+### Fixed
+
+- **Blu’s brain "Test" from a paired phone said "Couldn’t ask. Is the bridge running?"** when the device only has permission to look. It now says what the computer said ("This device can look but not change things. Turn on “Let this device control” for it…"), and so do the other settings saves. The test itself, OpenRouter included, was fine: it answers in about a second on the computer.
+- The certificate test on macOS (LibreSSL writes no key identifiers, so they are now spelled out), and a flaky renewal test that picked its port at random.
 
 ### Changed
 
