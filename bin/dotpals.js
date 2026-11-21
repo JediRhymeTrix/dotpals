@@ -645,7 +645,7 @@ async function remoteCommand(sub, flags) {
     3. Turn the remote client on (Settings → Remote) and scan the QR code, or open ${bold(`https://${made.addresses[0]}:${port}/pair`)}${name ? `\n       ${dim(`${name} works too on phones that can look up .local names (iPhone and Mac always can; Android Chrome mostly). Use the address if it doesn't.`)}` : ''}
 
   ${dim('The CA can only vouch for private addresses and .local names, so installing it can’t make a real website look trusted.')}
-  ${dim('If your computer’s address changes, run this again: it reissues the certificate (the CA stays, so phones keep working).')}
+  ${dim('If your computer’s address changes, dotpals issues a new certificate by itself (the CA stays, so phones keep working). Only a changed .local name needs this run again.')}
   ${dim('Firefox on Android keeps its own list: Settings → About → tap the logo 5 times → Secret settings → Use third party CA certificates.')}
 `);
   if (flags.has('--no-restart')) return;
