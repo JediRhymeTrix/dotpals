@@ -75,7 +75,7 @@ send requests to a `laya-serve` instance you install and run yourself. Laya is
 made by Convai Innovations and licensed under the Apache License 2.0.
 
 ================================================================================
-qrcode-generator 2.0.4 (bridge/vendor/qrcode.mjs)
+qrcode-generator 2.0.4 (bridge/vendor/qrcode.js)
 https://github.com/kazuhikoarase/qrcode-generator
 ================================================================================
 
