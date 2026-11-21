@@ -5,7 +5,7 @@ import { X509Certificate } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { altNames, certDir, ensureCerts, findOpenssl, privateAddresses } from '../bridge/remote-cert.js';
+import { altNames, certDir, ensureCerts, findOpenssl, leafExtensions, privateAddresses } from '../bridge/remote-cert.js';
 
 const openssl = findOpenssl();
 const tmp = mkdtempSync(join(tmpdir(), 'dotpals-cert-'));
@@ -56,7 +56,7 @@ test('a real CA and server certificate: chain verifies, names and constraints ar
 test('the CA cannot vouch for a public name (name constraints, checked by openssl)', { skip: !openssl && 'needs openssl' }, () => {
   const dir = join(tmp, 'real');
   const sign = (alt, tag) => {
-    writeFileSync(join(dir, `${tag}.cnf`), `subjectAltName=${alt}\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\n`);
+    writeFileSync(join(dir, `${tag}.cnf`), leafExtensions(alt));
     spawnSync(openssl, ['req', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', `${tag}.key`, '-out', `${tag}.csr`, '-subj', '/CN=x'], { cwd: dir });
     spawnSync(openssl, ['x509', '-req', '-in', `${tag}.csr`, '-CA', 'ca.pem', '-CAkey', 'ca-key.pem', '-set_serial', '0x1234', '-out', `${tag}.pem`, '-days', '5', '-extfile', `${tag}.cnf`], { cwd: dir });
     return spawnSync(openssl, ['verify', '-CAfile', 'ca.pem', '-x509_strict', `${tag}.pem`], { cwd: dir, encoding: 'utf8' });

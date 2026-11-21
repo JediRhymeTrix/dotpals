@@ -77,6 +77,13 @@ export const altNames = (ips, name) => [...ips.map((i) => `IP:${i}`), 'IP:127.0.
 // Name constraints: private ranges, loopback, .local and localhost only.
 export const CONSTRAINTS = 'nameConstraints=critical,permitted;IP:192.168.0.0/255.255.0.0,permitted;IP:10.0.0.0/255.0.0.0,permitted;IP:172.16.0.0/255.240.0.0,permitted;IP:127.0.0.1/255.255.255.255,permitted;DNS:.local,permitted;DNS:localhost';
 
+/**
+ * The server certificate's extensions. Key identifiers are spelled out: OpenSSL adds them by itself, LibreSSL (what macOS
+ * ships) doesn't, and a strict verifier wants them. `keyid` (not `always`) leaves the authority one out when an older CA,
+ * made before this, has no key identifier to point at.
+ */
+export const leafExtensions = (names) => `subjectAltName=${names}\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n`;
+
 const sh = (openssl, args, cwd, run) => {
   const r = run(openssl, args, { cwd, encoding: 'utf8', env: opensslEnv(cwd) });
   if (r.status !== 0) throw new Error(`openssl ${args[0]} failed: ${String(r.stderr || r.error?.message || '').trim().split('\n').pop()}`);
@@ -98,7 +105,7 @@ export function ensureCerts({ dir, openssl = findOpenssl(), ips = privateAddress
 
   if (!existsSync(p('ca.pem')) || !existsSync(p('ca-key.pem'))) {
     sh(openssl, ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'ca-key.pem', '-out', 'ca.pem', '-days', '3650',
-      '-subj', '/CN=dotpals local CA', '-addext', 'basicConstraints=critical,CA:TRUE,pathlen:0', '-addext', 'keyUsage=critical,keyCertSign,cRLSign', '-addext', CONSTRAINTS], dir, run);
+      '-subj', '/CN=dotpals local CA', '-addext', 'basicConstraints=critical,CA:TRUE,pathlen:0', '-addext', 'keyUsage=critical,keyCertSign,cRLSign', '-addext', 'subjectKeyIdentifier=hash', '-addext', CONSTRAINTS], dir, run);
     lock(p('ca-key.pem'));
     created.ca = true;
   }
@@ -112,7 +119,7 @@ export function ensureCerts({ dir, openssl = findOpenssl(), ips = privateAddress
     aging = r.status !== 0; // non-zero: it ends within 30 days
   }
   if (created.ca || aging || current !== want || !existsSync(p('key.pem'))) {
-    writeFileSync(p('ext.cnf'), `subjectAltName=${want}\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\n`);
+    writeFileSync(p('ext.cnf'), leafExtensions(want));
     sh(openssl, ['req', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', 'key.pem', '-out', 'leaf.csr', '-subj', '/CN=dotpals'], dir, run);
     sh(openssl, ['x509', '-req', '-in', 'leaf.csr', '-CA', 'ca.pem', '-CAkey', 'ca-key.pem', '-set_serial', `0x${randomBytes(8).toString('hex')}`, '-out', 'cert.pem', '-days', '800', '-extfile', 'ext.cnf'], dir, run);
     lock(p('key.pem'));

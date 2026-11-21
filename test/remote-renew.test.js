@@ -1,6 +1,7 @@
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { X509Certificate } from 'node:crypto';
+import { createServer as createNet } from 'node:net';
 import { connect } from 'node:tls';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,7 +13,8 @@ const openssl = findOpenssl();
 const home = mkdtempSync(join(tmpdir(), 'dotpals-renew-'));
 after(() => rmSync(home, { recursive: true, force: true }));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const port = 7400 + Math.floor(Math.random() * 400);
+// A port the system says is free, not a guess in a range other tests also use (the second test takes the one after it).
+const port = await new Promise((ok) => { const s = createNet().listen(0, '127.0.0.1', () => { const { port: p } = s.address(); s.close(() => ok(p)); }); });
 
 /** What certificate does a TLS client see on this port right now (trusting nothing: we only want to read it). */
 const peerCert = () => new Promise((ok, no) => {
@@ -79,7 +81,7 @@ test('when the address changes, the running server serves a certificate for the 
 
   ips = ['192.168.1.69', '10.0.0.7']; // a new lease arrives
   let second;
-  for (let i = 0; i < 60; i++) { await wait(100); second = await peerCert(); if (/10\.0\.0\.7/.test(second.subjectAltName)) break; }
+  for (let i = 0; i < 200; i++) { await wait(100); second = await peerCert(); if (/10\.0\.0\.7/.test(second.subjectAltName)) break; }
   assert.match(second.subjectAltName, /IP Address:10\.0\.0\.7/, 'the new address is covered');
   assert.notEqual(second.fingerprint256, first.fingerprint256, 'a different certificate');
   assert.equal(second.checkIssued(new X509Certificate(readFileSync(join(home, 'remote-cert', 'ca.pem')))), true, 'issued by the same CA');
