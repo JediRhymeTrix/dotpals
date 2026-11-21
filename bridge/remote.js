@@ -39,8 +39,9 @@ export function cleanSubscription(sub) {
 // are allowed. Everything else on the API runs something on this computer or changes other
 // programs' files (hand-off terminals, Blu's tasks, rewinds, chat, apps, agent connect…): that
 // needs the device's `control` switch, which you turn on yourself, on this computer.
-const NEVER = [/^\/hook$/, /^\/event$/, /^\/api\/remote(\/|$)/, /^\/api\/app\/quit$/, /^\/api\/apps\/callback$/];
-const ALLOWED_POSTS = [/^\/api\/config$/, /^\/api\/approvals\/[\w-]{8,64}$/, /^\/api\/sessions\/[^/]{1,200}\/dismiss$/, /^\/api\/chat\/answer$/];
+// `/api/remote/me…` is a device managing itself (its own push, name, sign-out); the rest of /api/remote is this computer's.
+const NEVER = [/^\/hook$/, /^\/event$/, /^\/api\/remote(?:\/(?!me(?:\/|$)).*)?$/, /^\/api\/app\/quit$/, /^\/api\/apps\/callback$/];
+const ALLOWED_POSTS = [/^\/api\/config$/, /^\/api\/approvals\/[\w-]{8,64}$/, /^\/api\/sessions\/[^/]{1,200}\/dismiss$/, /^\/api\/chat\/answer$/, /^\/api\/remote\/me(?:\/[a-z]+)?$/];
 
 /** 'ok', 'control' (needs the device's control switch) or 'blocked'. */
 export function permission(device, method, path) {
@@ -51,11 +52,23 @@ export function permission(device, method, path) {
   return device?.control ? 'ok' : 'control';
 }
 
-/** A settings patch from a paired device, without the parts only this computer may change. */
-export function remotePatch(patch) {
-  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return {};
-  const { remote, ...rest } = patch;
-  return rest;
+/** Settings any paired device may change: how things look and sound, not what runs on this computer. */
+export const SAFE_SETTINGS = ['sounds', 'notifications', 'character', 'custom', 'palSize', 'storyView', 'morningBrief', 'stuckAlerts', 'conflictMinutes', 'approvalWait'];
+
+/**
+ * A settings patch from a paired device: { patch, denied }. A device with the control switch
+ * may change anything; the others only SAFE_SETTINGS. `denied` lists what was refused (the
+ * whole request is then refused, never half applied).
+ */
+export function remotePatch(patch, device) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { patch: {}, denied: [] };
+  if (device?.control) return { patch, denied: [] };
+  const out = {};
+  const denied = [];
+  for (const [key, value] of Object.entries(patch)) {
+    if (SAFE_SETTINGS.includes(key)) out[key] = value; else denied.push(key);
+  }
+  return { patch: out, denied };
 }
 
 /** At most `max` tries per `windowMs` for one key (an address): small, in memory, forgets itself. */
