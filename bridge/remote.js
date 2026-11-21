@@ -35,13 +35,14 @@ export function cleanSubscription(sub) {
 
 // -- what a paired device may ask the bridge ---------------------------------------------------
 // Reading is open. A few things never go through (agents' hooks, quitting, pairing others, the
-// local OAuth callback). Changing settings, answering permission prompts and dismissing sessions
-// are allowed. Everything else on the API runs something on this computer or changes other
-// programs' files (hand-off terminals, Blu's tasks, rewinds, chat, apps, agent connect…): that
-// needs the device's `control` switch, which you turn on yourself, on this computer.
+// local OAuth callback). Changing the safe settings and dismissing sessions are allowed.
+// Everything else on the API runs something on this computer or changes other programs' files:
+// hand-off terminals, Blu's tasks, rewinds, chat, apps, agent connect, and ANSWERING AN AGENT'S
+// PERMISSION PROMPT (allowing "run npm install" is running it). Those need the device's `control`
+// switch, which you turn on yourself, on this computer, so a lost phone can only look.
 // `/api/remote/me…` is a device managing itself (its own push, name, sign-out); the rest of /api/remote is this computer's.
 const NEVER = [/^\/hook$/, /^\/event$/, /^\/api\/remote(?:\/(?!me(?:\/|$)).*)?$/, /^\/api\/app\/quit$/, /^\/api\/apps\/callback$/];
-const ALLOWED_POSTS = [/^\/api\/config$/, /^\/api\/approvals\/[\w-]{8,64}$/, /^\/api\/sessions\/[^/]{1,200}\/dismiss$/, /^\/api\/chat\/answer$/, /^\/api\/remote\/me(?:\/[a-z]+)?$/];
+const ALLOWED_POSTS = [/^\/api\/config$/, /^\/api\/sessions\/[^/]{1,200}\/dismiss$/, /^\/api\/remote\/me(?:\/[a-z]+)?$/];
 
 /** 'ok', 'control' (needs the device's control switch) or 'blocked'. */
 export function permission(device, method, path) {
@@ -157,7 +158,7 @@ export function createRemote({ file, now = Date.now } = {}) {
     },
     devices: () => load().devices.map(view),
     device: (id) => { const d = find(id); return d ? view(d) : null; },
-    pushTargets: () => load().devices.filter((d) => d.push).map((d) => ({ id: d.id, sub: d.push, prefs: cleanPrefs(d.prefs) })),
+    pushTargets: () => load().devices.filter((d) => d.push).map((d) => ({ id: d.id, sub: d.push, control: !!d.control, prefs: cleanPrefs(d.prefs) })),
     /** { name?, control?, prefs?, push? (a subscription, or null to remove it) } */
     update(id, patch = {}) {
       const d = find(id);

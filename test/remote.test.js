@@ -64,9 +64,8 @@ test('permissions: reading is open, risky actions need the control switch, some 
   assert.equal(permission(plain, 'GET', '/api/activity'), 'ok');
   assert.equal(permission(plain, 'GET', '/events'), 'ok');
   assert.equal(permission(plain, 'POST', '/api/config'), 'ok');
-  assert.equal(permission(plain, 'POST', '/api/approvals/0123456789abcdef'), 'ok');
   assert.equal(permission(plain, 'POST', '/api/sessions/abc/dismiss'), 'ok');
-  for (const p of ['/api/handoff', '/api/rewind/undo', '/api/talk/start', '/api/chat', '/api/agents/claude/connect', '/api/apps/add', '/api/history/clear']) {
+  for (const p of ['/api/approvals/0123456789abcdef', '/api/chat/answer', '/api/handoff', '/api/rewind/undo', '/api/talk/start', '/api/chat', '/api/agents/claude/connect', '/api/apps/add', '/api/history/clear']) {
     assert.equal(permission(plain, 'POST', p), 'control', p);
     assert.equal(permission(trusted, 'POST', p), 'ok', p);
   }
