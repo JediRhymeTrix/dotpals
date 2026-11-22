@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Notifications wear the pal of the agent that caused them, with a face that fits.** The large icon beside a notification on Android (not the small status-bar badge, which stays dotpals) is now that agent's pal, the same one the agent has in the tray, looking the way the pal looks in the matching state: happy when a request is done, wide-eyed when an agent needs you or asks permission, pondering when it seems stuck, x-eyed and sad when two agents clash or tests are given up on, hard at work when its context is nearly full. The faces are the pal's own agent states, drawn by the real `<dot-pal>` (`scripts/make-avatars.mjs` makes the 45 pictures in `bridge/remote/avatars/`; run it again if a pal changes). A custom pal and the test button use Blu. Worker build 7.
+
 - Fork-only daily upstream-rebase attempts, gated by exact-commit full CI, atomic backup/lease-protected promotion and draft repair PRs on conflicts or failed CI. Open repair PRs pause further attempts. See `docs/FORK-SYNC.md`.
 - Explicit PWA update checks on startup, resume (throttled) and request. A complete, build-specific shell waits for Update; the requesting page reloads once. Failed registration/check/activation can be retried. Legacy workers may take over once without forcing a page reload.
 - Push receipts, ten-entry per-device in-memory history and phone-local worker/last-push metadata. Receipts correlate to the original send even when late, concurrent or out of order.
 
 ### Fixed
 
+- **Notifications could switch themselves off.** A push address dotpals refused to send to was treated as “the subscription is dead” and erased, so the phone silently stopped getting notifications. Only a push service saying the subscription is gone (404/410) forgets it now. Chrome on Android also uses Google hosts such as `jmt17.google.com/fcm/send/…`, which are accepted (only under `/fcm/`); a subscription that is still refused says which push service it was.
 - Notification diagnostics distinguish provider acceptance, worker receipt and browser display-request success without claiming a visible OS popup, battery-saving cause or delivery latency. Physical-phone delivery remains intermittent; cause unestablished.
 - Tests request high urgency, unique tags/Topics, renotify and interaction hints; these do not guarantee immediate delivery. The worker now honors disabling “Only when I’m away”.
 - Remote mutation routes reject GET/HEAD; hook-only recap stays local. Push subscriptions accept only browser-provider hosts and never follow redirects. Notification clicks stay same-origin. Final notification text is bounded and pattern-redacted, including context labels.

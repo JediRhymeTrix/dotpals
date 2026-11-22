@@ -3,6 +3,8 @@
 // running, so the bridge decides here, the same way, per device and per its own preferences.
 import { redactText } from './redact.js';
 import { harnessName } from './ui/recap.js';
+import { CAST, avatarName } from './remote/avatar-names.js';
+import { characterFor } from './remote/pals-core.js';
 
 const clip = (s, n) => { const t = redactText(String(s ?? '')).text.replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const VERB = { run: 'run a command', edit: 'edit a file', write: 'write a file', delete: 'delete a file', web: 'go online', agent: 'start a helper agent', mcp: 'use a tool', read: 'read a file', search: 'search' };
@@ -81,7 +83,7 @@ export function createPusher({ remote, hub, send, vapid, subject, turn, now = Da
       }
       // High urgency requests prompt delivery; the push service and OS still decide when to deliver.
       const urgent = item.kind === 'approval' || item.kind === 'waiting' || !!item.test;
-      const body = JSON.stringify({ kind: item.kind, title: clip(item.title, 80), body: clip(item.body, 200), tag, at: t, test: !!item.test, quietWhenOpen: target.prefs.quietWhenOpen, url: item.test ? '/#settings/remote' : '/#sessions' });
+      const body = JSON.stringify({ kind: item.kind, title: clip(item.title, 80), body: clip(item.body, 200), tag, at: t, test: !!item.test, avatar: avatarName(item.kind, item.test ? CAST[0] : characterFor(item.harness, CAST)), quietWhenOpen: target.prefs.quietWhenOpen, url: item.test ? '/#settings/remote' : '/#sessions' });
       const entry = { at: t, kind: item.kind, tag: String(tag ?? '').slice(0, 40), test: !!item.test, ok: null, status: 0, gone: false };
       const past = sent_.get(target.id) ?? [];
       past.push(entry); // before awaiting: a fast receipt may beat the push service's response
@@ -103,8 +105,9 @@ export function createPusher({ remote, hub, send, vapid, subject, turn, now = Da
         if (timer) { clearTimeout(timer); waiting.delete(data.session); }
       }
       if (!remote.pushTargets().length) return;
-      const item = pushFor(event, data, { turn });
-      if (!item) return;
+      const found = pushFor(event, data, { turn });
+      if (!found) return;
+      const item = { ...found, harness: data.harness }; // whose avatar the notification wears
       if (!item.delay) { deliver(item).catch(() => {}); return; }
       const timer = setTimeout(() => { waiting.delete(data.session); deliver(item).catch(() => {}); }, item.delay);
       timer.unref?.();

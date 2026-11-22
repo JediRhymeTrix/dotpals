@@ -22,7 +22,7 @@ export const typeOf = (path) => TYPES[path.slice(path.lastIndexOf('.'))] ?? 'app
 export const ALIASES = { '/': '/bridge/dashboard.html', '/pair': '/bridge/remote/pair.html', '/sw.js': '/bridge/remote/sw.js', '/manifest.webmanifest': '/bridge/remote/manifest.webmanifest' };
 const STATIC = [
   /^\/(?:pair|sw\.js|manifest\.webmanifest)?$/, /^\/desktop\/icon\.png$/, /^\/src\/[\w.-]+\.js$/, /^\/bridge\/ui\/[\w.-]+\.js$/,
-  /^\/bridge\/activity\.js$/, /^\/bridge\/remote\/(?:icons\/)?[\w.-]+\.(?:js|css|png|svg)$/, /^\/bridge\/vendor\/qrcode\.js$/,
+  /^\/bridge\/activity\.js$/, /^\/bridge\/remote\/(?:(?:icons|avatars)\/)?[\w.-]+\.(?:js|css|png|svg)$/, /^\/bridge\/vendor\/qrcode\.js$/,
 ];
 export const allowed = (path) => STATIC.some((r) => r.test(path));
 

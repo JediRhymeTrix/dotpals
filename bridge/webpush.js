@@ -60,7 +60,10 @@ export function pushEndpoint(value) {
     const u = new URL(String(value));
     if (u.protocol !== 'https:' || u.username || u.password || (u.port && u.port !== '443')) return null;
     const h = u.hostname.toLowerCase();
-    if (!['fcm.googleapis.com', 'updates.push.services.mozilla.com', 'web.push.apple.com'].includes(h) && !/^[a-z0-9-]+\.notify\.windows\.com$/.test(h)) return null;
+    // Google's own hosts (Chrome on Android also uses names like jmt17.google.com/fcm/send/...), Mozilla's, Apple's and Windows'.
+    const known = ['fcm.googleapis.com', 'web.push.apple.com'].includes(h) || /^(?:[a-z0-9-]+\.)*push\.services\.mozilla\.com$/.test(h) || /^[a-z0-9-]+\.notify\.windows\.com$/.test(h)
+      || (/^[a-z0-9-]+\.google\.com$/.test(h) && u.pathname.startsWith('/fcm/'));
+    if (!known) return null;
     return u.href;
   } catch { return null; }
 }
@@ -71,7 +74,8 @@ export function pushEndpoint(value) {
  */
 export async function sendPush(sub, text, vapid, { subject, ttl = 3600, urgency = 'normal', topic, timeout = 8000, fetcher = fetch } = {}) {
   const endpoint = pushEndpoint(sub?.endpoint);
-  if (!endpoint) return { ok: false, status: 0, gone: true };
+  // A refused address is OUR policy, not the push service saying the subscription is dead: never make the caller forget it.
+  if (!endpoint) return { ok: false, status: 0, gone: false };
   try {
     const headers = {
       authorization: vapidHeader(endpoint, vapid, subject),

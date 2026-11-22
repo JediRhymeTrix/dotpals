@@ -67,7 +67,21 @@ The page slides in from the side you swiped (not if you've asked your device to 
 
 Chosen per device, on the device: a request finishes (only ones that took a while), an agent is waiting for you (still waiting after 20 s), an agent asks permission (needs *control*), an agent seems stuck, two agents on one file, an agent gave up on failing tests, a context window nearly full (off by default). *Only when I'm away* skips them while the app is open on that device.
 
-They're [Web Push](https://www.rfc-editor.org/rfc/rfc8030): the computer encrypts each one for that device ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) and signs it ([VAPID, RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)). Only Google, Mozilla, Apple and Microsoft push-provider hosts are accepted; custom providers are not supported. Providers see ciphertext and network/timing metadata, not notification plaintext. Text is shortened and pattern-redacted before encryption; this is best effort, not a guarantee that arbitrary sensitive prose is removed. Lock-screen previews can expose it. Ordinary notifications are limited to one per tag per 10 s and 20 per minute per device; explicit tests bypass those preferences and limits.
+They're [Web Push](https://www.rfc-editor.org/rfc/rfc8030): the computer encrypts each one for that device ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) and signs it ([VAPID, RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)). Only Google (including the `*.google.com/fcm/` hosts Chrome on Android uses), Mozilla, Apple and Microsoft push-provider hosts are accepted; custom providers are not supported. A refused address is reported with the service name and never deletes a working subscription. Providers see ciphertext and network/timing metadata, not notification plaintext. Text is shortened and pattern-redacted before encryption; this is best effort, not a guarantee that arbitrary sensitive prose is removed. Lock-screen previews can expose it. Ordinary notifications are limited to one per tag per 10 s and 20 per minute per device; explicit tests bypass those preferences and limits.
+
+### Whose face is on a notification
+
+The large icon next to a notification (Android; the small status-bar badge stays dotpals) is the pal of the agent that caused it, the same pal that agent has in the tray, wearing the expression of the matching pal state. These are the pal's own agent states, so the faces cannot drift from the app:
+
+| Notification | Pal state | Face |
+|---|---|---|
+| A request finished | done | happy |
+| An agent is waiting for you, or asks permission | waiting | wide-eyed |
+| An agent seems stuck | thinking | pondering |
+| Two agents, one file; tests given up on | error | x-eyed, sad |
+| A context window is nearly full | working | hard at work |
+
+A custom pal has no picture, so it, an unknown agent in a test, and the Send a test button use Blu. The 45 pictures (9 pals x 5 states) live in `bridge/remote/avatars/` and are drawn by the real pal: run `node scripts/make-avatars.mjs` (needs Edge or Chrome) after changing a pal or the states, and commit the result. A notification can only name one of these pictures; anything else shows the app icon. Whether the phone actually draws the large icon is up to Android and the notification's settings: it is not shown on every launcher or in every notification style.
 
 ### Updating the app on your phone
 

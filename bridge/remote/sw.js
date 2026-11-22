@@ -7,7 +7,7 @@
 const VERSION = '__VERSION__';
 // Bumped when what this worker DOES changes (VERSION only changes with a release): the page tells a stale copy apart by it
 // (push-words.js WORKER_BUILD must match).
-const BUILD = 6;
+const BUILD = 7;
 // From this build on a new worker WAITS until the page says "update now" (message SKIP_WAITING), as the pdsvc dashboard does:
 // the user picks the moment, nothing reloads under them. A page older than this has no Update button, so one that finds it
 // installing over such a worker takes over at once, this one time (see install).
@@ -21,7 +21,7 @@ const keep = async (key, value) => {
 };
 const SHELL_FILES = [
   '/', '/manifest.webmanifest', '/bridge/remote/remote.css', '/bridge/remote/boot.js', '/bridge/remote/stream.js', '/bridge/remote/client.js',
-  '/bridge/remote/push-words.js', '/bridge/remote/updater.js', '/bridge/remote/update-ui.js', '/bridge/remote/swipe.js', '/bridge/remote/pals.js', '/bridge/remote/pals-core.js', '/bridge/remote/talk.js', '/bridge/remote/settings.js', '/bridge/remote/icons/icon-192.png', '/desktop/icon.png',
+  '/bridge/remote/push-words.js', '/bridge/remote/avatar-names.js', '/bridge/remote/updater.js', '/bridge/remote/update-ui.js', '/bridge/remote/swipe.js', '/bridge/remote/pals.js', '/bridge/remote/pals-core.js', '/bridge/remote/talk.js', '/bridge/remote/settings.js', '/bridge/remote/icons/icon-192.png', '/desktop/icon.png',
   '/src/index.js', '/src/actions.js', '/src/agent.js', '/src/characters.js', '/src/custom.js', '/src/element.js',
   '/bridge/ui/buddy.js', '/bridge/ui/handoff-menu.js', '/bridge/ui/recap.js', '/bridge/ui/replay.js', '/bridge/ui/report.js', '/bridge/ui/story.js', '/bridge/ui/testout.js',
 ];
@@ -48,6 +48,9 @@ self.addEventListener('activate', (event) => {
 });
 
 const isShell = (url) => url.origin === self.location.origin && (url.pathname === '/' || /^\/(?:src|bridge|desktop)\//.test(url.pathname) || url.pathname === '/manifest.webmanifest');
+// The pal that is responsible for a notification, wearing the face that fits it (bridge/remote/avatars, made by scripts/make-avatars.mjs).
+// Anything that isn't one of those names gets the app's own icon.
+const avatarOf = (name) => (/^[a-z]{2,12}-(?:done|waiting|thinking|working|error)$/.test(name) ? `/bridge/remote/avatars/${name}.png` : '/bridge/remote/icons/icon-192.png');
 const localUrl = (value) => {
   try {
     const url = new URL(value, self.location.origin);
@@ -108,7 +111,7 @@ self.addEventListener('push', (event) => {
       try {
         await self.registration.showNotification(String(note.title).slice(0, 80), {
           body: String(note.body ?? '').slice(0, 200), tag: String(note.tag ?? 'dotpals'), renotify: note.kind === 'approval' || !!note.test,
-          icon: '/bridge/remote/icons/icon-192.png', badge: '/bridge/remote/icons/icon-96.png', timestamp: Number(note.at) || Date.now(),
+          icon: avatarOf(note.avatar), badge: '/bridge/remote/icons/icon-96.png', timestamp: Number(note.at) || Date.now(),
           // A hint to keep important notifications available; the OS decides presentation.
           requireInteraction: note.kind === 'approval' || note.kind === 'waiting' || !!note.test, data: { url: typeof note.url === 'string' && note.url.startsWith('/') ? localUrl(note.url) : '/' },
         });

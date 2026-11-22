@@ -200,7 +200,12 @@ export function createRemoteServer({ config, file, certHome, root, version, api,
     try { body = await readJson(req, 8192); } catch (err) { return out(res, err.status ?? 400, { error: err.message }); }
     if (path === '/api/remote/me/push') {
       const updated = remote.update(id, { push: body.subscription ?? null });
-      if (!updated) return out(res, 400, { error: 'That notification subscription isn’t valid.' });
+      if (!updated) {
+        // Say which push service was refused (its name only: the rest of the address is a secret that identifies the phone).
+        let host = '?'; try { host = new URL(String(body.subscription?.endpoint)).hostname.slice(0, 80); } catch {}
+        log(`remote: refused a notification subscription from ${host}`);
+        return out(res, 400, { error: `That notification subscription isn’t valid (the push service ${host} isn’t one dotpals sends to).` });
+      }
       if (body.subscription) pusher.test(id).catch(() => {});
       return out(res, 200, updated);
     }
