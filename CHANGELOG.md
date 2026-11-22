@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-21
+
 ### Added
 
 - **Notifications wear the pal of the agent that caused them, with a face that fits.** The large icon beside a notification on Android (not the small status-bar badge, which stays dotpals) is now that agent's pal, the same one the agent has in the tray, looking the way the pal looks in the matching state: happy when a request is done, wide-eyed when an agent needs you or asks permission, pondering when it seems stuck, x-eyed and sad when two agents clash or tests are given up on, hard at work when its context is nearly full. The faces are the pal's own agent states, drawn by the real `<dot-pal>` (`scripts/make-avatars.mjs` makes the 45 pictures in `bridge/remote/avatars/`; run it again if a pal changes). A custom pal and the test button use Blu. Worker build 7.
-
-- Fork-only daily upstream-rebase attempts, gated by exact-commit full CI, atomic backup/lease-protected promotion and draft repair PRs on conflicts or failed CI. Open repair PRs pause further attempts. See `docs/FORK-SYNC.md`.
 - Explicit PWA update checks on startup, resume (throttled) and request. A complete, build-specific shell waits for Update; the requesting page reloads once. Failed registration/check/activation can be retried. Legacy workers may take over once without forcing a page reload.
 - Push receipts, ten-entry per-device in-memory history and phone-local worker/last-push metadata. Receipts correlate to the original send even when late, concurrent or out of order.
+
+### Changed
+
+- Maintenance, not a feature: this fork now tries a daily upstream rebase, gated by exact-commit full CI, atomic backup/lease-protected promotion and draft repair PRs on conflicts or failed CI. Open repair PRs pause further attempts. See `docs/FORK-SYNC.md`.
 
 ### Fixed
 
