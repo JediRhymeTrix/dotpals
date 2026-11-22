@@ -54,6 +54,10 @@ test('a picture exists for every pal and every state, and is a real PNG of a sen
 test('names are only ever ours: nothing from the network reaches a path', () => {
   assert.equal(avatarName('done', 'blu'), 'blu-done');
   assert.equal(avatarName('approval', 'nova'), 'nova-waiting');
+  assert.equal(avatarName('nonsense', 'custom'), 'blu-done', 'a custom pal has no picture: the default pal');
+  assert.equal(avatarPath('nova-error'), '/bridge/remote/avatars/nova-error.png');
+  for (const bad of ['../../x', 'blu-done/../../x', 'blu-sleeping', 'evil-done', 'blu', '', null, undefined, 5, 'blu-done.png', 'BLU-done', '//evil.example/a-b']) assert.equal(avatarPath(bad), null, String(bad));
+});
 
 test('the same agent is the same pal in the tray, in Talk and in its notification', async () => {
   for (const harness of ['claude', 'codex', 'cursor', 'gemini', 'opencode', 'goose', 'cline-cli', undefined]) {
@@ -109,9 +113,4 @@ test('the service worker shows the avatar, and only ever one of ours', async () 
 test('the offline shell holds the names the page imports', () => {
   const sw = readFileSync(new URL('../bridge/remote/sw.js', import.meta.url), 'utf8');
   assert.ok(sw.includes("'/bridge/remote/avatar-names.js'"));
-});
-
-  assert.equal(avatarName('nonsense', 'custom'), 'blu-done', 'a custom pal has no picture: the default pal');
-  assert.equal(avatarPath('nova-error'), '/bridge/remote/avatars/nova-error.png');
-  for (const bad of ['../../x', 'blu-done/../../x', 'blu-sleeping', 'evil-done', 'blu', '', null, undefined, 5, 'blu-done.png', 'BLU-done', '//evil.example/a-b']) assert.equal(avatarPath(bad), null, String(bad));
 });
