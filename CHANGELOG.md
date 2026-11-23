@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Record the fork author's successful 0.15.0 remote-client test on a physical Samsung Galaxy Z Fold8 Ultra, including notifications. Other device and browser combinations are not implied.
+
 ## [0.15.0] - 2026-11-21
 
 ### Added
@@ -22,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Notifications could switch themselves off.** A push address dotpals refused to send to was treated as “the subscription is dead” and erased, so the phone silently stopped getting notifications. Only a push service saying the subscription is gone (404/410) forgets it now. Chrome on Android also uses Google hosts such as `jmt17.google.com/fcm/send/…`, which are accepted (only under `/fcm/`); a subscription that is still refused says which push service it was.
-- Notification diagnostics distinguish provider acceptance, worker receipt and browser display-request success without claiming a visible OS popup, battery-saving cause or delivery latency. Physical-phone delivery remains intermittent; cause unestablished.
+- Notification diagnostics distinguish provider acceptance, worker receipt and browser display-request success without claiming a visible OS popup, battery-saving cause or delivery latency. Earlier development runs observed intermittent delivery; the cause was not established. The fork author subsequently reported successful notification delivery on a Samsung Galaxy Z Fold8 Ultra with 0.15.0.
 - Tests request high urgency, unique tags/Topics, renotify and interaction hints; these do not guarantee immediate delivery. The worker now honors disabling “Only when I’m away”.
 - Remote mutation routes reject GET/HEAD; hook-only recap stays local. Push subscriptions accept only browser-provider hosts and never follow redirects. Notification clicks stay same-origin. Final notification text is bounded and pattern-redacted, including context labels.
 - Connector page/API/event views omit private launch commands and URL credentials, paths and query strings. Controlling browser-origin Talk requests pass the remote admission boundary without weakening the local listener's Origin check.

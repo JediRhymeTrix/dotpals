@@ -111,7 +111,7 @@ A test requests *high* urgency, a distinct tag/Topic, `renotify` and `requireInt
 
 Recent pushes lists up to ten per-device server records held in memory (five shown in Settings); restart clears them. Late receipts attach to their original send. The receipt's `at` is **when the computer heard back**, not phone arrival time. Phone-local arrival timestamps use a separate clock; subtracting the two clocks does not establish delivery latency. Preserve a test's history rather than repeatedly sending new tests.
 
-Physical-phone delivery remains intermittent in current testing; its cause has not been established. Desktop real-browser tests exercise subscription, encrypted push, worker receipt, notification registration and update flow, not an Android/iOS popup guarantee.
+**Physical-device test:** the fork author tested the remote client on a Samsung Galaxy Z Fold8 Ultra with dotpals 0.15.0 and reported that it worked, including notifications. Earlier intermittent delivery was observed during development; its cause was not established. This is one device and setup, not a guarantee for other Android browsers, launchers, networks or iOS.
 
 ## Real time, cheaply
 
@@ -135,7 +135,7 @@ The layout follows the [Device Posture API](https://developer.mozilla.org/en-US/
 
 Where the browser gives real segment geometry, the hinge's width and each screen's size come from it; with only a `folded` posture, each half is half the screen and a safe gap stays clear. To try it on any browser: `localStorage.setItem('dotpals.posture', 'folded')` (and `dotpals.span` = `horizontal` or `vertical`), then reload.
 
-Not yet tried on a physical foldable: the layouts are checked in Edge with the posture forced, which exercises the same CSS and attributes the real APIs set.
+The remote client was tested on a physical Samsung Galaxy Z Fold8 Ultra. Edge tests also force the layout modes to exercise the CSS; those tests are not evidence for every device's native posture or segment detection.
 
 ## Security
 
