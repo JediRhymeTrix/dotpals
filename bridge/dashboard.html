@@ -2717,7 +2717,9 @@
     renderApps();
 
     // -- Settings, a tab at a time (#settings/<tab>) -------------------------------------------
-    const SETTINGS_TABS = ['pal', 'agents', 'blu', 'apps', 'remote', 'more'];
+    const pairedDevice = document.querySelector('meta[name="dotpals-face"]')?.content === 'device';
+    if (pairedDevice) document.querySelector('button[data-tab="apps"]').hidden = true;
+    const SETTINGS_TABS = ['pal', 'agents', 'blu', ...(!pairedDevice ? ['apps'] : []), 'remote', 'more'];
     let settingsTab = (() => { try { return localStorage.getItem('dotpals.settings.tab'); } catch { return null; } })() || 'pal';
     function showSettingsTab(tab) {
       settingsTab = SETTINGS_TABS.includes(tab) ? tab : 'pal';

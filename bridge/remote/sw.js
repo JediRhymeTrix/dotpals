@@ -7,7 +7,7 @@
 const VERSION = '__VERSION__';
 // Bumped when what this worker DOES changes (VERSION only changes with a release): the page tells a stale copy apart by it
 // (push-words.js WORKER_BUILD must match).
-const BUILD = 7;
+const BUILD = 9;
 // From this build on a new worker WAITS until the page says "update now" (message SKIP_WAITING), as the pdsvc dashboard does:
 // the user picks the moment, nothing reloads under them. A page older than this has no Update button, so one that finds it
 // installing over such a worker takes over at once, this one time (see install).
@@ -50,7 +50,7 @@ self.addEventListener('activate', (event) => {
 const isShell = (url) => url.origin === self.location.origin && (url.pathname === '/' || /^\/(?:src|bridge|desktop)\//.test(url.pathname) || url.pathname === '/manifest.webmanifest');
 // The pal that is responsible for a notification, wearing the face that fits it (bridge/remote/avatars, made by scripts/make-avatars.mjs).
 // Anything that isn't one of those names gets the app's own icon.
-const avatarOf = (name) => (/^[a-z]{2,12}-(?:done|waiting|thinking|working|error)$/.test(name) ? `/bridge/remote/avatars/${name}.png` : '/bridge/remote/icons/icon-192.png');
+const avatarOf = (name) => (/^(?:blu|hop|sunny|lovi|muse|grok|nova|byte|webby)-(?:done|waiting|thinking|working|error)$/.test(name) ? `/bridge/remote/avatars/${name}.png` : '/bridge/remote/icons/icon-192.png');
 const localUrl = (value) => {
   try {
     const url = new URL(value, self.location.origin);
@@ -101,25 +101,19 @@ self.addEventListener('push', (event) => {
   const record = { at: got, sentAt: Number(note.at) || 0, phase: 'received', shown: false, held: false, error: parsed ? '' : 'unreadable', permission: self.Notification?.permission ?? '', ackStatus: 0, tag: String(note.tag ?? '').slice(0, 40) };
   event.waitUntil((async () => {
     await remember(record, sequence);
-    // If the app is open and visible, it already shows this live: don't buzz as well. Except a test (it's pressed
-    // from the open app, so hiding it would make "Send a test" look broken) and a permission prompt.
-    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const held = note.quietWhenOpen !== false && !note.test && note.kind !== 'approval' && open.some((c) => c.visibilityState === 'visible');
-    let shown = !held;
+    // Quiet mode is decided before sending. A delivered userVisibleOnly push must request a notification.
+    const held = false;
+    let shown = true;
     let error = '';
-    if (!held) {
-      try {
-        await self.registration.showNotification(String(note.title).slice(0, 80), {
+    try {
+      await self.registration.showNotification(String(note.title).slice(0, 80), {
           body: String(note.body ?? '').slice(0, 200), tag: String(note.tag ?? 'dotpals'), renotify: note.kind === 'approval' || !!note.test,
           icon: avatarOf(note.avatar), badge: '/bridge/remote/icons/icon-96.png', timestamp: Number(note.at) || Date.now(),
           // A hint to keep important notifications available; the OS decides presentation.
           requireInteraction: note.kind === 'approval' || note.kind === 'waiting' || !!note.test, data: { url: typeof note.url === 'string' && note.url.startsWith('/') ? localUrl(note.url) : '/' },
-        });
-      } catch (err) { shown = false; error = String(err?.message ?? err).slice(0, 80); }
-    }
-    // Tell the computer it ARRIVED and whether it was shown. "Accepted by the push service" only means the push service
-    // took it; this is the phone saying it got it, so a missing notification can be told apart: never arrived (the push
-    // service, the network, battery saving) or arrived and wasn't shown (permission, the app being open).
+      });
+    } catch (err) { shown = false; error = String(err?.message ?? err).slice(0, 80); }
+    // Report worker receipt and browser display outcome, separately from provider acceptance and OS presentation.
     Object.assign(record, { phase: 'done', shown, held, error: error || record.error });
     await remember(record, sequence);
     try {
@@ -145,7 +139,7 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const mine = open.find((c) => new URL(c.url).origin === self.location.origin);
-    if (mine) { await mine.focus(); if ('navigate' in mine && target !== mine.url) mine.navigate(target).catch(() => {}); return; }
+    if (mine) { await mine.focus(); if ('navigate' in mine && target !== mine.url) await mine.navigate(target).catch(() => {}); return; }
     await self.clients.openWindow(target);
   })());
 });

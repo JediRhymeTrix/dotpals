@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-23
+
+### Fixed
+
+- Require HTTPS for paired remote access outside direct loopback and limit remote APIs and stream events to explicit lists. Desktop connectors, screenshots and approval endpoints stay local.
+- Use certificate-covered LAN addresses for automatic pairing and renew expiring certificates even when the address stays the same. Return a revoked device to pairing instead of continuing to reconnect.
+- Recover opted-in push subscriptions on app launch, avoid deleting a replacement when an old send fails, and request display for delivered push messages. Quiet mode is decided before sending. PWA worker build 9.
+
 ### Documentation
 
 - Record the fork author's successful 0.15.0 remote-client test on a physical Samsung Galaxy Z Fold8 Ultra, including notifications. Other device and browser combinations are not implied.

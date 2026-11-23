@@ -22,11 +22,11 @@ Settings → Remote on the computer. Nothing here runs, listens or sends anythin
 
 ## What a paired device can do
 
-Out of the box a device can **look** (everything the dashboard shows) and change how things **look and sound** (pal, sounds, notification settings, story view). It can not run anything on your computer.
+Out of the box a device can **look** (the remote dashboard and its allowed data) and change how things **look and sound** (pal, sounds, notification settings, story view). It can not run anything on your computer.
 
-Turn on **Let this device control** (on the computer, per device) and it can hand off sessions, rewind a request, start Blu's coding tasks and change settings except remote administration. This grants powerful access to your computer, so it is separate and off by default. A look-only lost phone can still expose private session data: revoke it promptly.
+Turn on **Let this device control** (on the computer, per device) and it can hand off sessions, rewind a request, start Blu's coding tasks and change ordinary settings, not remote administration. This grants powerful access to your computer, so it is separate and off by default. A look-only lost phone can still expose private session data: revoke it promptly.
 
-The API permission boundary also requires control for answering permission requests, but the remote UI does not yet render Allow/Deny cards. A remote stream alone never intercepts Claude's terminal prompt. Answer on the desktop. Blu's remote panel supports answers and coding plans; desktop actions (volume, clicking, typing) and connector execution are not implemented there.
+Approval endpoints and the Apps tab stay on the desktop. A remote stream alone never intercepts Claude's terminal prompt. Blu's remote panel supports answers and coding plans; desktop actions (volume, clicking, typing) and connector execution are not implemented there.
 
 Never from a device, whatever its switch: agents' hooks, events and hook recap consumption, quitting the app, pairing others, or remote administration.
 
@@ -67,7 +67,7 @@ The page slides in from the side you swiped (not if you've asked your device to 
 
 Chosen per device, on the device: a request finishes (only ones that took a while), an agent is waiting for you (still waiting after 20 s), an agent asks permission (needs *control*), an agent seems stuck, two agents on one file, an agent gave up on failing tests, a context window nearly full (off by default). *Only when I'm away* skips them while the app is open on that device.
 
-They're [Web Push](https://www.rfc-editor.org/rfc/rfc8030): the computer encrypts each one for that device ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) and signs it ([VAPID, RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)). Only Google (including the `*.google.com/fcm/` hosts Chrome on Android uses), Mozilla, Apple and Microsoft push-provider hosts are accepted; custom providers are not supported. A refused address is reported with the service name and never deletes a working subscription. Providers see ciphertext and network/timing metadata, not notification plaintext. Text is shortened and pattern-redacted before encryption; this is best effort, not a guarantee that arbitrary sensitive prose is removed. Lock-screen previews can expose it. Ordinary notifications are limited to one per tag per 10 s and 20 per minute per device; explicit tests bypass those preferences and limits.
+They're [Web Push](https://www.rfc-editor.org/rfc/rfc8030): the computer encrypts each one for that device ([RFC 8291](https://www.rfc-editor.org/rfc/rfc8291)) and signs it ([VAPID, RFC 8292](https://www.rfc-editor.org/rfc/rfc8292)). Only Google (including the `*.google.com/fcm/` hosts Chrome on Android uses), Mozilla, Apple and Microsoft push-provider hosts are accepted; custom providers are not supported. A refused address is reported with the service name and never deletes a working subscription. Providers see ciphertext and network/timing metadata, not notification plaintext. Text is shortened and pattern-redacted before encryption; this is best effort, not a guarantee that arbitrary sensitive prose is removed. Lock-screen previews can expose it. Ordinary notifications are limited to one per tag per 10 s and 20 per minute per device; explicit tests bypass notification preferences, but device-requested tests have their own five-per-minute limit.
 
 ### Whose face is on a notification
 
@@ -111,7 +111,7 @@ A test requests *high* urgency, a distinct tag/Topic, `renotify` and `requireInt
 
 Recent pushes lists up to ten per-device server records held in memory (five shown in Settings); restart clears them. Late receipts attach to their original send. The receipt's `at` is **when the computer heard back**, not phone arrival time. Phone-local arrival timestamps use a separate clock; subtracting the two clocks does not establish delivery latency. Preserve a test's history rather than repeatedly sending new tests.
 
-**Physical-device test:** the fork author tested the remote client on a Samsung Galaxy Z Fold8 Ultra with dotpals 0.15.0 and reported that it worked, including notifications. Earlier intermittent delivery was observed during development; its cause was not established. This is one device and setup, not a guarantee for other Android browsers, launchers, networks or iOS.
+**Physical-device test:** the fork author tested the remote client on a Samsung Galaxy Z Fold8 Ultra with dotpals 0.15.0 and reported that it worked, including notifications. Earlier intermittent delivery was observed during development; its cause was not established. This is one device and setup, not a guarantee for other Android browsers, launchers, networks or iOS. If the service rotates a subscription while the app is closed, reopening the app will attempt to repair it if notifications are still enabled. Quiet mode suppresses sends on the computer; a notification already in flight can still appear.
 
 ## Real time, cheaply
 
@@ -119,7 +119,7 @@ Recent pushes lists up to ten per-device server records held in memory (five sho
 - Changes to the same thing are sent once (a tool call that updates ten times in a moment is one message), in one write, gzip-compressed.
 - Scripts and styles are cached by build. Update checks fetch the worker explicitly; uncached static requests can revalidate with ETags.
 - A device that can't keep up is dropped and resumes, not buffered without limit. An idle live-stream hub has no timer; enabled TLS certificate maintenance still checks for address changes.
-- A new device loads the last 3 days (`remote.historyDays`, 1 to 7).
+- An initial snapshot and activity fetch include the last 3 days by default (`remote.historyDays`, 1 to 7). This is a snapshot size setting, not a privacy boundary for live or recently buffered events.
 
 ## Foldables
 
@@ -140,12 +140,12 @@ The remote client was tested on a physical Samsung Galaxy Z Fold8 Ultra. Edge te
 ## Security
 
 - The remote listener is a **second** server. The bridge's own `127.0.0.1:5175` is not rebound or exposed. Only permitted API routes are forwarded internally; hooks, hook recap, quit, OAuth callback and remote administration stay local.
-- A pairing code is 60 random bits, hashed in memory, single use, five minutes, and rides in the URL `#fragment` (not sent in the page request; the claim sends it in a POST body). The page removes it from the address bar. Too many wrong tries cancels pending codes.
+- A pairing code is 60 random bits, hashed in memory, single use, five minutes, and rides in the URL `#fragment` (not sent in the page request; the claim sends it in a POST body). The page removes it from the address bar. Pairing attempts are rate-limited.
 - Pairing only completes over https (or from this computer). The device cookie is `HttpOnly; Secure; SameSite=Strict`, 256 random bits; only its SHA-256 is stored, in `~/.dotpals/remote.json` (0600).
 - Every request is checked: host name, origin, a custom header on changes, the device, then what that device may do. Pages carry a Content Security Policy that allows only this origin's scripts.
 - Sign a device out from the computer or the device; it's cut off at once, mid-stream.
 - Don't expose port 5176 to the internet without https. A tunnel is fine; port-forwarding plain http is not.
-- Paired devices can read sensitive session data. The page stores a recent snapshot locally; revocation cannot erase already-downloaded copies from an offline device. See [SECURITY.md](../SECURITY.md) for trust boundaries, private-CA cautions and push-provider metadata.
+- Paired devices can read sensitive session data. Revocation cannot erase data already viewed or copied by a device. See [SECURITY.md](../SECURITY.md) for trust boundaries, private-CA cautions and push-provider metadata.
 
 ## Files
 

@@ -149,8 +149,8 @@ function init() {
       const lp = d.lastPush;
       const pushNote = !d.push ? 'Notifications off.' : lp ? `Notifications on. Last: ${pushVerdict(lp, when(lp.at))}` : 'Notifications on.';
       box.append(row(status, pushNote, name));
-      box.append(row('Let this device control', 'Off: it can look and change how things look. On: it can also answer permission prompts, hand off sessions, rewind and change any setting.',
-        sw(d.control, async (i) => { if (i.checked && !confirm(`Let “${d.name}” control dotpals, including allowing agents to run commands?`)) { i.checked = false; return; } state = await call(`/api/remote/devices/${d.id}`, { control: i.checked }); draw(); }, `Let ${d.name} control`)));
+      box.append(row('Let this device control', 'Off: it can look and change appearance. On: it can also hand off sessions, rewind and start coding tasks. Permission prompts and Apps stay on the desktop.',
+        sw(d.control, async (i) => { if (i.checked && !confirm(`Let “${d.name}” control dotpals, including starting coding tasks?`)) { i.checked = false; return; } state = await call(`/api/remote/devices/${d.id}`, { control: i.checked }); draw(); }, `Let ${d.name} control`)));
       const acts = el('div', 'acts'); acts.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;padding-bottom:8px';
       if (d.push) acts.append(btn('Send a test', async () => { await call(`/api/remote/devices/${d.id}/test`, {}); toast('Sent'); }));
       acts.append(btn('Sign out', async () => { state = await call(`/api/remote/devices/${d.id}/revoke`, {}); draw(); }, 'danger'));

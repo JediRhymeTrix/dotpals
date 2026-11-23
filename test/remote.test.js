@@ -77,18 +77,19 @@ test('at most 20 devices', () => {
   assert.equal(r.finishPairing(r.startPairing().token, 'one too many'), null);
 });
 
-test('permissions: reading is open, risky actions need the control switch, some never pass', () => {
+test('permissions: only listed routes are available; powerful actions require control', () => {
   const plain = { control: false };
   const trusted = { control: true };
   assert.equal(permission(plain, 'GET', '/api/activity'), 'ok');
   assert.equal(permission(plain, 'GET', '/events'), 'ok');
   assert.equal(permission(plain, 'POST', '/api/config'), 'ok');
-  assert.equal(permission(plain, 'POST', '/api/sessions/abc/dismiss'), 'ok');
-  for (const p of ['/api/approvals/0123456789abcdef', '/api/chat/answer', '/api/handoff', '/api/rewind/undo', '/api/talk/start', '/api/chat', '/api/agents/claude/connect', '/api/apps/add', '/api/history/clear']) {
+  for (const p of ['/api/handoff', '/api/rewind/undo', '/api/talk/start', '/api/sessions/abc/dismiss']) {
     assert.equal(permission(plain, 'POST', p), 'control', p);
     assert.equal(permission(trusted, 'POST', p), 'ok', p);
   }
   for (const d of [plain, trusted]) {
+    for (const p of ['/api/apps', '/api/approvals', '/api/remote/future', '/api/future']) assert.equal(permission(d, 'GET', p), 'blocked', p);
+    for (const p of ['/api/apps/add', '/api/talk/apps', '/api/approvals/0123456789abcdef', '/api/chat', '/api/agents/claude/connect', '/api/history/clear', '/api/future']) assert.equal(permission(d, 'POST', p), 'blocked', p);
     for (const method of ['GET', 'HEAD', 'POST']) assert.equal(permission(d, method, '/api/recap'), 'blocked', 'hook recap must not consume shared state remotely');
     for (const [m, p] of [['POST', '/hook'], ['POST', '/event'], ['POST', '/api/app/quit'], ['POST', '/api/remote/pair'], ['GET', '/api/remote/devices'], ['GET', '/api/apps/callback'], ['GET', '/bridge/server.js'], ['PUT', '/api/config'], ['DELETE', '/api/config']]) assert.equal(permission(d, m, p), 'blocked', `${m} ${p}`);
   }
@@ -103,7 +104,7 @@ test('settings: a device changes the safe ones; the rest needs the control switc
 });
 
 test('a device manages itself under /api/remote/me, but never the computer-side /api/remote', () => {
-  for (const p of ['/api/remote/me', '/api/remote/me/push', '/api/remote/me/prefs']) assert.equal(permission({ control: false }, 'POST', p), 'ok', p);
+  for (const p of ['/api/remote/me/signout', '/api/remote/me/push', '/api/remote/me/prefs']) assert.equal(permission({ control: false }, 'POST', p), 'ok', p);
   assert.equal(permission({ control: false }, 'GET', '/api/remote/me'), 'ok');
   for (const p of ['/api/remote', '/api/remote/', '/api/remote/pair', '/api/remote/devices', '/api/remote/members', '/api/remote/meta']) {
     assert.equal(permission({ control: true }, 'POST', p), 'blocked', p);
@@ -124,6 +125,10 @@ test('push preferences and subscriptions are validated', () => {
   assert.equal(r.update(c.id, { push: { endpoint: 'https://fcm.googleapis.com/x', keys: { ...keys, auth: 'AA' } } }), null);
   assert.equal(r.update(c.id, { push: { endpoint: 'https://fcm.googleapis.com/x', keys } }).push, true);
   assert.equal(r.pushTargets().length, 1);
+  const original = r.pushTargets()[0].sub;
+  assert.equal(r.update(c.id, { push: { endpoint: 'https://fcm.googleapis.com/replacement', keys } }).push, true);
+  assert.equal(r.forgetSubscription(c.id, original), false, 'late 410 must not remove a replacement');
+  assert.equal(r.forgetSubscription(c.id, r.pushTargets()[0].sub), true);
   assert.equal(r.update(c.id, { push: null }).push, false);
   assert.equal(r.pushTargets().length, 0);
   assert.equal(r.update(c.id, { control: true }).control, true);

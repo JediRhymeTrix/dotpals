@@ -61,8 +61,8 @@ test('the remote client answers on its own port; the bridge keeps its own', asyn
 });
 
 test('computer-side pairing needs this computer: the remote port cannot reach /api/remote', async () => {
-  assert.equal((await R('/api/remote')).status, 401);
-  assert.equal((await post('/api/remote/pair', {})).status, 401);
+  assert.equal((await R('/api/remote')).status, 403);
+  assert.equal((await post('/api/remote/pair', {})).status, 403);
   assert.equal((await fetch(`http://127.0.0.1:${ctx.main}/api/remote/pair`, { method: 'POST', body: '{}' })).status, 403); // no x-dotpals
 });
 
@@ -112,7 +112,7 @@ test('remote management never mutates state through GET or HEAD', async () => {
       assert.equal((await fetch(`http://127.0.0.1:${ctx.main}${path}`, { method })).status, 405, path);
     }
     for (const path of ['/api/remote/me/signout', '/api/remote/me/push', '/api/remote/me/test', '/api/remote/me/prefs']) {
-      assert.equal((await R(path, { method, headers: { cookie } })).status, 405, path);
+      assert.equal((await R(path, { method, headers: { cookie } })).status, 403, path);
     }
   }
   assert.equal((await R('/api/remote/me', { headers: { cookie } })).status, 200);
@@ -155,6 +155,36 @@ test('settings: safe ones change, powerful ones need the control switch', async 
   await M(`/api/remote/devices/${deviceId}`, { control: false });
 });
 
+test('unlisted APIs stay local even with control, and local test traffic needs the exact origin', async () => {
+  await M(`/api/remote/devices/${deviceId}`, { control: true });
+  try {
+    for (const path of ['/api/apps', '/api/approvals', '/api/recap']) assert.equal((await R(path, { headers: { cookie } })).status, 403, path);
+    for (const path of ['/api/apps/add', '/api/talk/apps', '/api/history/clear']) assert.equal((await post(path, {}, cookie)).status, 403, path);
+    assert.equal((await R('/api/remote/me/prefs', { method: 'POST', headers: { cookie, 'x-dotpals': '1', origin: `https://127.0.0.1:${ctx.remote}` }, body: '{}' })).status, 403);
+    const local = await R('/api/remote/me/prefs', { method: 'POST', headers: { cookie, 'x-dotpals': '1', origin: `http://127.0.0.1:${ctx.remote}` }, body: '{}' });
+    assert.equal(local.status, 200);
+  } finally { await M(`/api/remote/devices/${deviceId}`, { control: false }); }
+});
+
+test('subscription recovery does not re-enable notifications after opt-out', async () => {
+  assert.equal((await post('/api/remote/me/push', { subscription: null, recover: true }, cookie)).status, 409);
+  assert.equal((await post('/api/remote/me/test', {}, cookie)).status, 409);
+});
+
+test('the paired activity snapshot respects the configured remote history window', async () => {
+  const event = (id, at) => ({ session: 'history-window', harness: 'test', activity: { id, kind: 'prompt', title: id, status: 'info', at } });
+  await M('/api/config', { remote: { historyDays: 1 } });
+  try {
+    await M('/event', event('remote-history-old', Date.now() - 2 * 86_400_000));
+    await M('/event', event('remote-history-recent', Date.now()));
+    const local = await (await M('/api/activity')).json();
+    const paired = await (await R('/api/activity', { headers: { cookie } })).json();
+    assert.ok(local.entries.some((e) => e.title === 'remote-history-old'));
+    assert.ok(paired.entries.some((e) => e.title === 'remote-history-recent'));
+    assert.ok(!paired.entries.some((e) => e.title === 'remote-history-old'));
+  } finally { await M('/api/config', { remote: { historyDays: 3 } }); }
+});
+
 test('a controlling remote stream without approval cards does not intercept a terminal permission prompt', async () => {
   await M(`/api/remote/devices/${deviceId}`, { control: true });
   await M('/api/config', { approvals: true });
@@ -183,7 +213,7 @@ test('static files are served with an ETag, revalidate with 304, and the bridge 
   assert.equal(first.headers.get('x-content-type-options'), 'nosniff');
   assert.equal((await R('/bridge/ui/recap.js', { headers: { 'if-none-match': etag } })).status, 304);
   for (const hidden of ['/bridge/server.js', '/bridge/remote.js', '/bridge/config.js', '/package.json', '/bridge/../package.json', '/..%2fpackage.json', '/desktop/main.js']) {
-    assert.ok([401, 404].includes((await R(hidden)).status), hidden);
+    assert.ok([403, 404].includes((await R(hidden)).status), hidden);
   }
 });
 
@@ -205,7 +235,7 @@ test('the dashboard is served as an installable app with a strict, hash-based CS
   assert.ok(!sw.includes('__VERSION__'));
   assert.equal((await R('/pair')).status, 200);
   assert.equal((await R('/bridge/remote/pair.js')).status, 200);
-  assert.equal((await R('/bridge/vendor/qrcode.js')).status, 200);
+  assert.equal((await R('/bridge/vendor/qrcode.js')).status, 403, 'QR generation is server-side');
 });
 
 async function readUntilReady(reader) {

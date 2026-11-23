@@ -34,27 +34,23 @@ export function cleanSubscription(sub) {
 }
 
 // -- what a paired device may ask the bridge ---------------------------------------------------
-// Reading is open. A few things never go through (agents' hooks, quitting, pairing others, the
-// local OAuth callback). Changing the safe settings and dismissing sessions are allowed.
-// Everything else on the API runs something on this computer or changes other programs' files:
-// hand-off terminals, Blu's tasks, rewinds, chat, apps, agent connect, and ANSWERING AN AGENT'S
-// PERMISSION PROMPT (allowing "run npm install" is running it). Those need the device's `control`
-// switch, which you turn on yourself, on this computer, so a lost phone can only look.
-// `/api/remote/me…` is a device managing itself (its own push, name, sign-out); the rest of /api/remote is this computer's.
-const NEVER = [/^\/hook$/, /^\/event$/, /^\/api\/recap$/, /^\/api\/remote(?:\/(?!me(?:\/|$)).*)?$/, /^\/api\/app\/quit$/, /^\/api\/apps\/callback$/];
-const ALLOWED_POSTS = [/^\/api\/config$/, /^\/api\/sessions\/[^/]{1,200}\/dismiss$/, /^\/api\/remote\/me(?:\/[a-z]+)?$/];
+// The device can manage its own name, push and credential. Desktop admin and unrelated APIs stay local.
+// Explicit lists: adding a local bridge route must not silently expose it to the network.
+const READS = new Set(['/events', '/api/activity', '/api/agents', '/api/brain', '/api/config', '/api/git', '/api/loop', '/api/remote/me', '/api/sessions', '/api/status', '/api/usage']);
+const SELF = new Set(['/api/remote/me/prefs', '/api/remote/me/signout', '/api/remote/me/push', '/api/remote/me/ack', '/api/remote/me/test']);
+const CONTROL = new Set(['/api/brain/test', '/api/handoff', '/api/rewind/preview', '/api/rewind', '/api/rewind/undo', '/api/talk/buddy', '/api/talk/plan', '/api/talk/start']);
 
 /** 'ok', 'control' (needs the device's control switch) or 'blocked'. */
 export function permission(device, method, path) {
-  if (NEVER.some((r) => r.test(path))) return 'blocked';
-  if (method === 'GET' || method === 'HEAD') return path === '/events' || path.startsWith('/api/') ? 'ok' : 'blocked';
-  if (method !== 'POST' || !path.startsWith('/api/')) return 'blocked';
-  if (ALLOWED_POSTS.some((r) => r.test(path))) return 'ok';
+  if (method === 'GET') return READS.has(path) ? 'ok' : 'blocked';
+  if (method !== 'POST') return 'blocked';
+  if (SELF.has(path) || path === '/api/config') return 'ok';
+  if (!CONTROL.has(path) && !/^\/api\/sessions\/[^/]{1,200}\/dismiss$/.test(path)) return 'blocked';
   return device?.control ? 'ok' : 'control';
 }
 
 /** Settings any paired device may change: how things look and sound, not what runs on this computer. */
-export const SAFE_SETTINGS = ['sounds', 'notifications', 'character', 'custom', 'palSize', 'storyView', 'morningBrief', 'stuckAlerts', 'conflictMinutes', 'approvalWait'];
+export const SAFE_SETTINGS = ['sounds', 'notifications', 'character', 'custom', 'palSize', 'storyView'];
 
 /**
  * A settings patch from a paired device: { patch, denied }. A device with the control switch
@@ -79,10 +75,14 @@ export function createLimiter({ max = 10, windowMs = 60_000, now = Date.now } = 
     hit(key) {
       const t = now();
       const list = (hits.get(key) ?? []).filter((x) => t - x < windowMs);
+      if (list.length >= max) return false;
       list.push(t);
       hits.set(key, list);
-      if (hits.size > 500) for (const [k, v] of hits) if (t - v.at(-1) >= windowMs) hits.delete(k);
-      return list.length <= max;
+      if (hits.size > 500) {
+        for (const [k, v] of hits) if (t - v.at(-1) >= windowMs) hits.delete(k);
+        if (hits.size > 500) hits.delete(hits.keys().next().value);
+      }
+      return true;
     },
   };
 }
@@ -181,6 +181,17 @@ export function createRemote({ file, now = Date.now } = {}) {
     devices: () => load().devices.map(view),
     device: (id) => { const d = find(id); return d ? view(d) : null; },
     pushTargets: () => load().devices.filter((d) => d.push).map((d) => ({ id: d.id, sub: d.push, control: !!d.control, prefs: cleanPrefs(d.prefs) })),
+    hasSubscription(id, sub) {
+      const current = find(id)?.push;
+      return !!current?.keys && current.endpoint === sub?.endpoint && current.keys.p256dh === sub?.keys?.p256dh && current.keys.auth === sub?.keys?.auth;
+    },
+    forgetSubscription(id, subscription) {
+      const d = find(id);
+      if (!d || d.push !== subscription) return false;
+      d.push = null;
+      save();
+      return true;
+    },
     /** { name?, control?, prefs?, push? (a subscription, or null to remove it) } */
     update(id, patch = {}) {
       const d = find(id);

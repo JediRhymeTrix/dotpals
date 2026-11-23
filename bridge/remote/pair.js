@@ -25,6 +25,7 @@
   guessName().then((n) => { if (!$('name').value) $('name').value = n; });
 
   async function claim() {
+    if (location.protocol !== 'https:' && !['127.0.0.1', 'localhost', '[::1]'].includes(location.hostname)) return msg('Open the HTTPS pairing address before sending a code.', 'bad');
     const code = clean($('code').value);
     if (code.length !== 12) return msg('The code has 12 letters and numbers.', 'bad');
     $('go').disabled = true;

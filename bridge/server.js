@@ -930,10 +930,10 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   }
   const palOf = (p) => (typeof p === 'string' && /^[\w .'-]{1,30}$/.test(p) ? p : 'Blu');
   /** Blu's instructions for a look at your screen (bridge/buddy.js), from your settings now: the same for warming up and for the look. */
-  function buddyNow(name) {
+  function buddyNow(name, remote = false) {
     const blu = config.blu ?? {};
-    const can = { hands: blu.hands !== false, click: blu.click === true };
-    const apps = appsNow();
+    const can = { hands: !remote && blu.hands !== false, click: !remote && blu.click === true };
+    const apps = remote ? { connected: [], signIn: [] } : appsNow();
     return { blu, can, apps, system: buddySystem({ name, mode: blu.mode, can, music: blu.music, apps }) };
   }
   async function brainApi(req, res, path) {
@@ -987,8 +987,9 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
       const text = String(body.text ?? '').trim().slice(0, 2000);
       if (!text) return json(res, 400, { error: 'Say what you want' });
       const name = palOf(body.pal);
-      const { blu, can, apps, system } = buddyNow(name);
-      const shot = blu.see === false ? null : shotOf(body.shot);
+      const remote = remoteRequests.has(req);
+      const { blu, can, apps, system } = buddyNow(name, remote);
+      const shot = remote || blu.see === false ? null : shotOf(body.shot);
       const box = body.circled;
       const circled = shot && box && [box.x, box.y, box.w, box.h].every(Number.isFinite) ? { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.w), h: Math.round(box.h) } : null;
       const { brain, here, keys } = await brainFor('screen');
@@ -1002,6 +1003,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
         const input = buddyInput(text, { shot, circled, history, agents: blu.mode === 'everyday' ? [] : agentsNow(), name, words: yourWords(config.brain?.dictionary ?? []).words });
         const r = await askBrain(brain, keys, system, input, isQuick(brain) ? 40_000 : 90_000, images);
         const reply = parseBuddyReply(r.text, { size: shot?.w ? { w: shot.w, h: shot.h } : null, can, apps });
+        if (remote) return json(res, 200, { say: reply.say, by: r.by, ms: r.ms });
         // "Yes" to the change Blu just asked about: done now, not asked again. Only on your own plain
         // yes, right after Blu's question about that same change (bridge/buddy.js saidYesTo): the
         // brain can't confirm a change on its own, nor swap in another.
@@ -1072,7 +1074,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
       if (body.project && !chosen) return json(res, 404, { error: 'dotpals doesn’t know that project folder' });
       try {
         const name = typeof body.pal === 'string' && /^[\w .'-]{1,30}$/.test(body.pal) ? body.pal : 'Blu';
-        const shot = shotOf(body.shot);
+        const shot = remoteRequests.has(req) ? null : shotOf(body.shot);
         // Planned by Blu's brain: your Claude Code as before, or whichever AI you chose.
         const { brain, here, keys } = await brainFor('plan');
         const mine = here.find((b) => b.id === config.brain?.choice);
@@ -1615,7 +1617,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
       if (req.method !== 'GET' && (req.method !== 'POST' || req.headers['x-dotpals'] !== '1')) return json(res, 403, { error: 'forbidden' });
       return remoteServer.controlApi(req, res, path, { json, readBody });
     }
-    if (req.method === 'GET' && path === '/api/activity') return json(res, 200, { entries: activity.all() });
+    if (req.method === 'GET' && path === '/api/activity') return json(res, 200, { entries: remoteRequests.has(req) ? recentRemoteActivity() : activity.all() });
     if (req.method === 'GET' && path === '/api/loop') {
       const session = new URL(req.url, 'http://localhost').searchParams.get('session');
       return json(res, 200, { events: loopEvents.filter((e) => !session || e.session === session) });
@@ -1708,7 +1710,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
       const { brain, here } = await brainFor('quick');
       const plan = pickBrain(here, { choice: config.brain?.choice, job: 'plan' });
       const screen = pickBrain(here, { choice: config.brain?.choice, job: 'screen' });
-      return json(res, 200, { brains: here, quick: brain?.id ?? null, plan: plan?.id ?? null, screen: screen?.id ?? null, brain: config.brain, keys: config.brainKeys ?? {}, apps: appsNow() });
+      return json(res, 200, { brains: here, quick: brain?.id ?? null, plan: plan?.id ?? null, screen: screen?.id ?? null, brain: config.brain, keys: config.brainKeys ?? {}, ...(remoteRequests.has(req) ? {} : { apps: appsNow() }) });
     }
 
     // Changes need a custom header: browsers won't send it cross-site without
@@ -1810,7 +1812,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
     // were, so `rewind/undo` { id } puts them back. `id`: the request's done entry.
     if (path === '/api/rewind/preview' || path === '/api/rewind' || path === '/api/rewind/undo') {
       const origin = req.headers.origin;
-      if (origin && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) return json(res, 403, { error: 'forbidden' });
+      if (origin && !remoteRequests.has(req) && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) return json(res, 403, { error: 'forbidden' });
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'bad json' }); }
       return rewind(res, path, body ?? {});
@@ -1911,7 +1913,7 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
   async function handoff(req, res) {
     // Starts a program: only this bridge's own pages (or no page at all) may ask.
     const origin = req.headers.origin;
-    if (origin && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) return json(res, 403, { error: 'forbidden' });
+    if (origin && !remoteRequests.has(req) && !/^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/i.test(origin)) return json(res, 403, { error: 'forbidden' });
     let body;
     try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'bad json' }); }
     const agent = body?.agent;
@@ -1935,19 +1937,17 @@ export function startBridge({ port = Number(process.env.DOTPALS_PORT || process.
 
   // -- Remote client (bridge/remote-server.js) ---------------------------------------------------
   // A second listener for paired phones and tablets; off unless Settings → Remote turns it on.
-  // `snapshot` is what a device gets when it connects: the same picture /events gives, trimmed to
-  // the last few days (it asks for more on demand), and the approvals only if it may answer them.
-  function remoteSnapshot(emit, { days, canAnswer }) {
+  const recentRemoteActivity = (days = config.remote.historyDays) => {
     const since = Date.now() - days * DAY;
+    return activity.all().filter((entry) => (entry.at ?? 0) >= since);
+  };
+  // The remote stream starts with recent activity and the current agent state.
+  function remoteSnapshot(emit, { days }) {
     emit('config', withLaya());
-    for (const entry of activity.all()) if ((entry.at ?? 0) >= since) emit('activity', entry);
+    for (const entry of recentRemoteActivity(days)) emit('activity', entry);
     for (const update of sessions.values()) emit(null, update);
     for (const ctx of contexts.values()) emit('context', ctx);
     for (const session of helpers.keys()) { const list = helperList(session); if (list.length) emit('helpers', { session, harness: sessions.get(session)?.harness, helpers: list }); }
-    if (canAnswer) {
-      for (const item of approvals.values()) emit('approval', { ...approvalView(item), status: 'pending' });
-      for (const item of ocAsks.values()) emit('ocask', { ...item, status: 'pending' });
-    }
   }
   const remoteServer = createRemoteServer({
     config: () => config.remote,
